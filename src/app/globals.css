@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display:
+    "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Inter,
+    Helvetica, Arial, sans-serif;
+  --font-text:
+    "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Inter,
+    Helvetica, Arial, sans-serif;
+
+  /* Premium neutral palette — high contrast, tight steps */
+  --color-ink: #0a0a0a;
+  --color-ink-soft: #1d1d1f;
+  --color-paper: #fbfbfd;
+  --color-paper-soft: #f5f5f7;
+  --color-line: #d2d2d7;
+  --color-mute: #6e6e73;
+  --color-accent: #0071e3;
+
+  /* Premium spacing scale beyond Tailwind defaults */
+  --spacing-section: 8rem;
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: var(--color-paper);
+  --bg-soft: var(--color-paper-soft);
+  --fg: var(--color-ink);
+  --fg-soft: var(--color-ink-soft);
+  --fg-mute: var(--color-mute);
+  --line: var(--color-line);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --bg-soft: #0a0a0a;
+    --fg: #f5f5f7;
+    --fg-soft: #d2d2d7;
+    --fg-mute: #86868b;
+    --line: #1d1d1f;
+  }
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-text);
+  font-feature-settings: "ss01", "cv11";
+  letter-spacing: -0.011em;
+}
+
+/* Apple-flavored display type — tight tracking, generous leading */
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+/* Section rhythm */
+.section {
+  padding-block: clamp(4rem, 10vw, 8rem);
+}
+
+.container-x {
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 3vw, 2.5rem);
+}
+
+/* Premium hairline divider */
+.hairline {
+  border-color: var(--line);
+}
+
+/* Hover lift used on cards */
+.lift {
+  transition:
+    transform 500ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 500ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 300ms ease;
+}
+.lift:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 20px 60px -20px rgb(0 0 0 / 0.18),
+    0 8px 20px -10px rgb(0 0 0 / 0.12);
+}
+
+/* Glass nav */
+.glass {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Respect prefers-reduced-motion globally — cancel transitions and scroll smoothing */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Custom focus ring (premium, not garish) */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Range input cleanup for filter sliders */
+input[type="range"] {
+  appearance: none;
+  background: transparent;
+  width: 100%;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--line);
+  border-radius: 2px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fg);
+  margin-top: -7px;
+  border: 2px solid var(--bg);
+}
