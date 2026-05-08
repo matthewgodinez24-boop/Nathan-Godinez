@@ -454,6 +454,57 @@ export const beats: Beat[] = [
     durationSeconds: 0,
     description: "Hard-hitting 808 + drum bundle. 80 hits, 20 loops, key + BPM tagged.",
   },
+
+  /* ---- Real uploads from Nathan's Drive ---- */
+  // BPM is from the filename. Key, mood, and genre are reasonable guesses based on
+  // the "(gunna)" stylistic prefix — confirm and adjust here when Nathan weighs in.
+  {
+    slug: "leaf",
+    title: "Leaf",
+    productType: "beat",
+    bpm: 120,
+    key: "A minor", // GUESS — confirm with Nathan
+    genre: "Hip-Hop",
+    moods: ["Driving", "Cinematic"],
+    tags: ["gunna type", "melodic trap", "808s", "co-prod barragini"],
+    priceFrom: 49,
+    licenseOptions: STANDARD_LICENSES,
+    // GUESS — 60/40 split between Nathan and Barragini. Adjust once Nathan confirms.
+    splits: [
+      { collaboratorId: "self", payoutPercent: 60 },
+      { collaboratorId: "barragini", payoutPercent: 40 },
+    ],
+    coverImage: "/images/beats/leaf.jpg",
+    previewSrc: "/audio/leaf-preview.mp3",
+    releasedAt: "2026-05-08",
+    durationSeconds: 192, // GUESS — actual file is ~3:12 at 320kbps; confirm
+    description:
+      "Melodic 120 BPM hip-hop in the Gunna lane — bright lead, sliding 808s, room for a vocal to ride the pocket. Co-produced with Barragini.",
+  },
+  // BPM from filename. "(afro)" prefix suggests Afrobeats/afro-fusion — guessed
+  // genre and mood accordingly. Confirm with Nathan.
+  {
+    slug: "vigo",
+    title: "Vigo",
+    productType: "loop",
+    bpm: 98,
+    key: "F minor", // GUESS — confirm with Nathan
+    genre: "Afrobeats",
+    moods: ["Driving", "Lush"],
+    tags: ["afro", "live percussion", "co-prod barragini"],
+    priceFrom: 29,
+    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    splits: [
+      { collaboratorId: "self", payoutPercent: 50 },
+      { collaboratorId: "barragini", payoutPercent: 50 },
+    ],
+    coverImage: "/images/beats/vigo.jpg",
+    previewSrc: "/audio/vigo-preview.mp3",
+    releasedAt: "2026-05-08",
+    durationSeconds: 198, // GUESS — confirm
+    description:
+      "Afrobeats loop at 98 BPM — warm guitar over live percussion. Drop it under a vocal hook or chop it into a verse. Co-produced with Barragini.",
+  },
 ];
 
 export function getBeatBySlug(slug: string): Beat | undefined {

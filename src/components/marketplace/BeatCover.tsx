@@ -320,6 +320,20 @@ const COVER_ART: Record<string, CoverArt> = {
     silhouette: "eye",
     palette: PALETTE.smoke,
   },
+
+  // Real uploads from Nathan's Drive
+  // Leaf — literal match to the silhouette name, on a deep rust palette
+  leaf: {
+    silhouette: "leaf",
+    palette: PALETTE.rust,
+    cornerMark: true,
+  },
+  // Vigo — afrobeat warmth, ember palette + flame
+  vigo: {
+    silhouette: "flame",
+    palette: PALETTE.ember,
+    glowCy: "0.65",
+  },
 };
 
 const FALLBACK_ART: CoverArt = {

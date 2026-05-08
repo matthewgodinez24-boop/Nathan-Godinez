@@ -38,6 +38,12 @@ export const collaborators: Collaborator[] = [
     name: "Jules Park",
     role: "Mix / Engineer",
   },
+  {
+    id: "barragini",
+    name: "Barragini",
+    role: "Co-production",
+    link: "https://instagram.com/barragini",
+  },
 ];
 
 export function getCollaborator(id: string): Collaborator | undefined {
