@@ -33,11 +33,11 @@ export const site = {
   // Hero — top of homepage
   hero: {
     eyebrow: "New release",
-    headline: "Tone, written like a song.",
+    headline: "Instrumentalist, Producer, Composer",
     sub:
       "Original instrumentals and guitar-led collaborations, built for artists who " +
       "care how a record sounds in the room.",
-    primaryCta: { label: "Browse beats", href: "/beats" },
+    primaryCta: { label: "Browse the catalog", href: "/beats" },
     secondaryCta: { label: "Hear the work", href: "#cinematic" },
   },
 

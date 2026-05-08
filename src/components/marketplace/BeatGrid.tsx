@@ -55,6 +55,7 @@ function filterAndSort(input: Beat[], f: Filters): Beat[] {
         b.title,
         b.genre,
         b.key,
+        b.productType,
         ...b.moods,
         ...b.tags,
       ]
@@ -62,10 +63,12 @@ function filterAndSort(input: Beat[], f: Filters): Beat[] {
         .toLowerCase();
       if (!haystack.includes(q)) return false;
     }
+    if (f.productTypes.length && !f.productTypes.includes(b.productType)) return false;
     if (f.genres.length && !f.genres.includes(b.genre)) return false;
     if (f.moods.length && !b.moods.some((m) => f.moods.includes(m))) return false;
     if (f.keys.length && !f.keys.includes(b.key)) return false;
-    if (b.bpm < f.bpmMin || b.bpm > f.bpmMax) return false;
+    // Sample kits store BPM=0 — exclude only when both ends of the range are tighter than 0.
+    if (b.bpm > 0 && (b.bpm < f.bpmMin || b.bpm > f.bpmMax)) return false;
     if (b.priceFrom < f.priceMin || b.priceFrom > f.priceMax) return false;
     return true;
   });

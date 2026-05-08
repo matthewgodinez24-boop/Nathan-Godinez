@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { site } from "@/data/site";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * Floating header. No filled bar, no black strip.
@@ -42,24 +43,28 @@ export function Header() {
       }}
     >
       <nav className="container-x flex h-12 items-center justify-between text-[13px]">
+        {/* Brand sits flush to the left edge — only this element gets the nudge */}
         <Link
           href="/"
-          className="display tracking-tight text-[17px] transition-colors"
+          className="display tracking-tight text-[14px] transition-colors -ml-[clamp(0.75rem,2.5vw,2rem)]"
         >
-          {site.artist.name}
+          Made By {site.artist.name}
         </Link>
-        <ul className="flex items-center gap-7">
-          {site.nav.map((item) => (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                className="opacity-90 transition-opacity hover:opacity-100"
-              >
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <div className="flex items-center gap-7">
+          <ul className="flex items-center gap-7">
+            {site.nav.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className="opacity-90 transition-opacity hover:opacity-100"
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <ThemeToggle />
+        </div>
       </nav>
     </header>
   );

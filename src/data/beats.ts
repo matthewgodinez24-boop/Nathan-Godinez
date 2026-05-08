@@ -12,6 +12,24 @@
 
 import type { Collaborator } from "./collaborators";
 
+/**
+ * Product types Nathan sells. The catalog page lets buyers filter on this.
+ * - beat:  full instrumental, ready to write/record over
+ * - loop:  short looped element (drums, guitar, hook) for producers to chop
+ * - song:  finished record (sometimes a feature, sometimes a sync candidate)
+ * - score: cue-style cinematic piece for film/TV/sync
+ * - kit:   sample/sound kit — multiple files bundled (drums + tags + one-shots)
+ */
+export type ProductType = "beat" | "loop" | "song" | "score" | "kit";
+
+export const PRODUCT_TYPES: { value: ProductType; label: string }[] = [
+  { value: "beat", label: "Beats" },
+  { value: "loop", label: "Loops" },
+  { value: "song", label: "Songs" },
+  { value: "score", label: "Scores" },
+  { value: "kit", label: "Kits" },
+];
+
 export type LicenseTier = "Basic" | "Premium" | "Trackouts" | "Unlimited" | "Exclusive";
 
 export type LicenseOption = {
@@ -38,6 +56,8 @@ export type CollaboratorSplit = {
 export type Beat = {
   slug: string;
   title: string;
+  // Product type — drives label, filter, and (eventually) delivery package contents
+  productType: ProductType;
   bpm: number;
   // Musical key, e.g. "F# minor"
   key: string;
@@ -120,6 +140,7 @@ export const beats: Beat[] = [
   {
     slug: "atlas-room",
     title: "Atlas Room",
+    productType: "beat",
     bpm: 84,
     key: "F# minor",
     genre: "R&B",
@@ -143,6 +164,7 @@ export const beats: Beat[] = [
   {
     slug: "north-room",
     title: "North Room",
+    productType: "beat",
     bpm: 92,
     key: "C minor",
     genre: "Hip-Hop",
@@ -165,6 +187,7 @@ export const beats: Beat[] = [
   {
     slug: "evening-stretch",
     title: "Evening Stretch",
+    productType: "beat",
     bpm: 72,
     key: "A major",
     genre: "Soul",
@@ -188,6 +211,7 @@ export const beats: Beat[] = [
   {
     slug: "lockstep",
     title: "Lockstep",
+    productType: "beat",
     bpm: 140,
     key: "E minor",
     genre: "Drill",
@@ -207,6 +231,7 @@ export const beats: Beat[] = [
   {
     slug: "skyway",
     title: "Skyway",
+    productType: "beat",
     bpm: 110,
     key: "D major",
     genre: "Pop",
@@ -227,6 +252,7 @@ export const beats: Beat[] = [
   {
     slug: "garden-tape",
     title: "Garden Tape",
+    productType: "beat",
     bpm: 88,
     key: "G major",
     genre: "Indie",
@@ -248,6 +274,7 @@ export const beats: Beat[] = [
   {
     slug: "hallway-light",
     title: "Hallway Light",
+    productType: "beat",
     bpm: 96,
     key: "B minor",
     genre: "R&B",
@@ -268,6 +295,7 @@ export const beats: Beat[] = [
   {
     slug: "border-town",
     title: "Border Town",
+    productType: "beat",
     bpm: 78,
     key: "E minor",
     genre: "Hip-Hop",
@@ -284,6 +312,148 @@ export const beats: Beat[] = [
     releasedAt: "2026-01-30",
     durationSeconds: 178,
     description: "Spaghetti-western tremolo guitar over a slow, heavy hip-hop drum.",
+  },
+
+  /* ---- LOOPS ---- */
+  {
+    slug: "warm-room-loop-pack",
+    title: "Warm Room — Guitar Loops",
+    productType: "loop",
+    bpm: 86,
+    key: "E minor",
+    genre: "R&B",
+    moods: ["Lush", "Mellow"],
+    tags: ["guitar loops", "live", "tape"],
+    priceFrom: 29,
+    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    splits: [{ collaboratorId: "self", payoutPercent: 100 }],
+    coverImage: "/images/beats/warm-room-loop-pack.jpg",
+    previewSrc: "/audio/warm-room-loop-pack-preview.mp3",
+    releasedAt: "2026-04-26",
+    durationSeconds: 96,
+    description: "Twelve melodic guitar loops at 86 BPM. Tape-saturated, key-tagged.",
+  },
+  {
+    slug: "drill-cuts-loop-pack",
+    title: "Drill Cuts — Guitar Loops",
+    productType: "loop",
+    bpm: 142,
+    key: "F# minor",
+    genre: "Drill",
+    moods: ["Dark", "Driving"],
+    tags: ["loops", "distorted", "drill"],
+    priceFrom: 29,
+    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    splits: [{ collaboratorId: "self", payoutPercent: 100 }],
+    coverImage: "/images/beats/drill-cuts-loop-pack.jpg",
+    previewSrc: "/audio/drill-cuts-loop-pack-preview.mp3",
+    releasedAt: "2026-04-12",
+    durationSeconds: 84,
+    description: "Sixteen drill-ready guitar loops at 142 BPM with sliding 808 stems.",
+  },
+
+  /* ---- SONGS ---- */
+  {
+    slug: "long-hallways",
+    title: "Long Hallways",
+    productType: "song",
+    bpm: 90,
+    key: "B minor",
+    genre: "R&B",
+    moods: ["Cinematic", "Lush"],
+    tags: ["finished record", "feature"],
+    priceFrom: 199,
+    licenseOptions: STANDARD_LICENSES,
+    splits: [
+      { collaboratorId: "self", payoutPercent: 60 },
+      { collaboratorId: "vocalist-aria", payoutPercent: 30 },
+      { collaboratorId: "engineer-jules", payoutPercent: 10 },
+    ],
+    coverImage: "/images/beats/long-hallways.jpg",
+    previewSrc: "/audio/long-hallways-preview.mp3",
+    releasedAt: "2026-04-04",
+    durationSeconds: 218,
+    description: "Finished record. Vocal feature included. Available for sync.",
+    featured: true,
+  },
+
+  /* ---- SCORES ---- */
+  {
+    slug: "first-light-cue",
+    title: "First Light",
+    productType: "score",
+    bpm: 64,
+    key: "D major",
+    genre: "Score",
+    moods: ["Cinematic", "Lush"],
+    tags: ["score", "sync", "cue"],
+    priceFrom: 149,
+    licenseOptions: STANDARD_LICENSES,
+    splits: [
+      { collaboratorId: "self", payoutPercent: 75 },
+      { collaboratorId: "engineer-jules", payoutPercent: 25 },
+    ],
+    coverImage: "/images/beats/first-light-cue.jpg",
+    previewSrc: "/audio/first-light-cue-preview.mp3",
+    releasedAt: "2026-03-18",
+    durationSeconds: 144,
+    description: "Slow-build cinematic cue. Strings, fingerpicked guitar, soft swell.",
+  },
+  {
+    slug: "open-water-cue",
+    title: "Open Water",
+    productType: "score",
+    bpm: 70,
+    key: "A minor",
+    genre: "Score",
+    moods: ["Cinematic", "Nostalgic"],
+    tags: ["score", "sync", "ambient"],
+    priceFrom: 149,
+    licenseOptions: STANDARD_LICENSES,
+    splits: [{ collaboratorId: "self", payoutPercent: 100 }],
+    coverImage: "/images/beats/open-water-cue.jpg",
+    previewSrc: "/audio/open-water-cue-preview.mp3",
+    releasedAt: "2026-02-22",
+    durationSeconds: 168,
+    description: "Ambient guitar score with bowed pads. Built for documentary or trailer.",
+  },
+
+  /* ---- KITS ---- */
+  {
+    slug: "studio-kit-vol-1",
+    title: "NG Studio Kit · Vol. 1",
+    productType: "kit",
+    bpm: 0,
+    key: "Various",
+    genre: "Sample Kit",
+    moods: ["Cinematic", "Lush", "Mellow"],
+    tags: ["drums", "guitar one-shots", "tags", "WAV"],
+    priceFrom: 39,
+    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    splits: [{ collaboratorId: "self", payoutPercent: 100 }],
+    coverImage: "/images/beats/studio-kit-vol-1.jpg",
+    previewSrc: "/audio/studio-kit-vol-1-preview.mp3",
+    releasedAt: "2026-04-15",
+    durationSeconds: 0,
+    description: "60 drum hits, 30 guitar one-shots, and 10 producer tags. WAV, royalty-free.",
+  },
+  {
+    slug: "studio-kit-vol-2",
+    title: "NG Studio Kit · Vol. 2",
+    productType: "kit",
+    bpm: 0,
+    key: "Various",
+    genre: "Sample Kit",
+    moods: ["Hard", "Driving"],
+    tags: ["drums", "808s", "trap", "WAV"],
+    priceFrom: 39,
+    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    splits: [{ collaboratorId: "self", payoutPercent: 100 }],
+    coverImage: "/images/beats/studio-kit-vol-2.jpg",
+    previewSrc: "/audio/studio-kit-vol-2-preview.mp3",
+    releasedAt: "2026-03-08",
+    durationSeconds: 0,
+    description: "Hard-hitting 808 + drum bundle. 80 hits, 20 loops, key + BPM tagged.",
   },
 ];
 

@@ -1,12 +1,20 @@
 "use client";
 
-import { ALL_GENRES, ALL_KEYS, ALL_MOODS, type Mood } from "@/data/beats";
+import {
+  ALL_GENRES,
+  ALL_KEYS,
+  ALL_MOODS,
+  PRODUCT_TYPES,
+  type Mood,
+  type ProductType,
+} from "@/data/beats";
 import { cn } from "@/lib/utils";
 
 export type SortKey = "newest" | "popular" | "price-asc" | "price-desc";
 
 export type Filters = {
   query: string;
+  productTypes: ProductType[];
   genres: string[];
   moods: Mood[];
   keys: string[];
@@ -19,11 +27,12 @@ export type Filters = {
 
 export const DEFAULT_FILTERS: Filters = {
   query: "",
+  productTypes: [],
   genres: [],
   moods: [],
   keys: [],
-  bpmMin: 60,
-  bpmMax: 180,
+  bpmMin: 0, // 0 lets sample kits (BPM=0) pass; tracks still match
+  bpmMax: 200,
   priceMin: 0,
   priceMax: 500,
   sort: "newest",
@@ -71,6 +80,57 @@ export function FilterBar({ filters, onChange, resultCount }: Props) {
           <option value="price-asc">Price: low to high</option>
           <option value="price-desc">Price: high to low</option>
         </select>
+      </div>
+
+      {/* Product type — primary filter, full-width row */}
+      <div className="mt-5">
+        <FilterGroup label="Type">
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => onChange({ ...filters, productTypes: [] })}
+              className={cn(
+                "rounded-full border px-3 py-1 text-[12px] transition",
+                filters.productTypes.length === 0
+                  ? "border-transparent bg-[color:var(--fg)] text-[color:var(--bg)]"
+                  : "hover:border-[color:var(--fg)]",
+              )}
+              style={
+                filters.productTypes.length !== 0
+                  ? { borderColor: "var(--line)" }
+                  : undefined
+              }
+            >
+              All
+            </button>
+            {PRODUCT_TYPES.map((pt) => {
+              const active = filters.productTypes.includes(pt.value);
+              return (
+                <button
+                  key={pt.value}
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...filters,
+                      productTypes: active
+                        ? filters.productTypes.filter((p) => p !== pt.value)
+                        : [...filters.productTypes, pt.value],
+                    })
+                  }
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-[12px] transition",
+                    active
+                      ? "border-transparent bg-[color:var(--fg)] text-[color:var(--bg)]"
+                      : "hover:border-[color:var(--fg)]",
+                  )}
+                  style={!active ? { borderColor: "var(--line)" } : undefined}
+                >
+                  {pt.label}
+                </button>
+              );
+            })}
+          </div>
+        </FilterGroup>
       </div>
 
       <div className="mt-5 grid gap-5 md:grid-cols-3 lg:grid-cols-4">
