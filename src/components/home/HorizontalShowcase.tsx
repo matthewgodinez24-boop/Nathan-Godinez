@@ -7,6 +7,7 @@ import {
   useTransform,
   useMotionValueEvent,
   useReducedMotion,
+  useSpring,
 } from "framer-motion";
 
 /**
@@ -113,11 +114,19 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
   // Slightly tighter than before — less scroll required per panel.
   const wrapperVh = (panelCount - 1) * 100 + 100; // total height in vh
   const translatePct = -((panelCount - 1) * 100);
-  const x = useTransform(
+  const xRaw = useTransform(
     scrollYProgress,
     [0.05, 0.95],
     ["0%", `${translatePct}%`],
   );
+  // Smooth the raw mapped value with a spring — kills the chunky 1:1 stutter that
+  // happens when scroll deltas are large (trackpad flicks, mouse wheel jumps).
+  const x = useSpring(xRaw, {
+    stiffness: 90,
+    damping: 26,
+    mass: 0.6,
+    restDelta: 0.001,
+  });
 
   // Mark consumed once the user reaches the end of the horizontal pan.
   useMotionValueEvent(scrollYProgress, "change", (v) => {

@@ -84,10 +84,11 @@ export type Beat = {
   featured?: boolean;
 };
 
+// Beat license tiers — Basic at $50, scaling up to Unlimited at $299.
 const STANDARD_LICENSES: LicenseOption[] = [
   {
     tier: "Basic",
-    price: 49,
+    price: 50,
     blurb: "MP3 lease for non-profit use.",
     rights: [
       "MP3 master delivered",
@@ -98,7 +99,7 @@ const STANDARD_LICENSES: LicenseOption[] = [
   },
   {
     tier: "Premium",
-    price: 99,
+    price: 100,
     blurb: "WAV lease, broader use.",
     rights: [
       "MP3 + WAV master delivered",
@@ -109,7 +110,7 @@ const STANDARD_LICENSES: LicenseOption[] = [
   },
   {
     tier: "Trackouts",
-    price: 199,
+    price: 200,
     blurb: "Stems for full creative control.",
     rights: [
       "MP3 + WAV + stems delivered",
@@ -120,13 +121,39 @@ const STANDARD_LICENSES: LicenseOption[] = [
   },
   {
     tier: "Unlimited",
-    price: 299,
+    price: 300,
     blurb: "Non-exclusive, no caps.",
     rights: [
       "All file formats delivered",
       "Unlimited streams + videos",
       "Live + paid performances",
       "Beat remains available to other buyers",
+    ],
+  },
+];
+
+// Loop / kit license tiers — Basic at $15.
+const LOOP_LICENSES: LicenseOption[] = [
+  {
+    tier: "Basic",
+    price: 15,
+    blurb: "MP3 loop lease, royalty-free.",
+    rights: [
+      "MP3 loop file delivered",
+      "Up to 100,000 streams",
+      "1 music video",
+      "Non-profit performances",
+    ],
+  },
+  {
+    tier: "Premium",
+    price: 35,
+    blurb: "WAV + stems, broader use.",
+    rights: [
+      "WAV + stems delivered",
+      "Unlimited streams + videos",
+      "Live performances allowed",
+      "Loop remains available to other buyers",
     ],
   },
 ];
@@ -146,7 +173,7 @@ export const beats: Beat[] = [
     genre: "R&B",
     moods: ["Cinematic", "Lush"],
     tags: ["live guitar", "tape saturation", "808"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 70 },
@@ -170,7 +197,7 @@ export const beats: Beat[] = [
     genre: "Hip-Hop",
     moods: ["Hard", "Driving"],
     tags: ["distorted guitar", "drum break"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 80 },
@@ -193,7 +220,7 @@ export const beats: Beat[] = [
     genre: "Soul",
     moods: ["Mellow", "Nostalgic"],
     tags: ["nylon guitar", "Rhodes", "warm"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 60 },
@@ -217,7 +244,7 @@ export const beats: Beat[] = [
     genre: "Drill",
     moods: ["Dark", "Driving"],
     tags: ["sliding 808s", "guitar lead"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 100 },
@@ -237,7 +264,7 @@ export const beats: Beat[] = [
     genre: "Pop",
     moods: ["Lush", "Cinematic"],
     tags: ["shimmer guitar", "synth pad"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 75 },
@@ -258,7 +285,7 @@ export const beats: Beat[] = [
     genre: "Indie",
     moods: ["Nostalgic", "Mellow"],
     tags: ["tape hiss", "fingerpicked"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 65 },
@@ -280,7 +307,7 @@ export const beats: Beat[] = [
     genre: "R&B",
     moods: ["Lush", "Mellow"],
     tags: ["chorus guitar", "low strings"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 70 },
@@ -301,7 +328,7 @@ export const beats: Beat[] = [
     genre: "Hip-Hop",
     moods: ["Cinematic", "Dark"],
     tags: ["spaghetti western", "tremolo"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 85 },
@@ -324,8 +351,8 @@ export const beats: Beat[] = [
     genre: "R&B",
     moods: ["Lush", "Mellow"],
     tags: ["guitar loops", "live", "tape"],
-    priceFrom: 29,
-    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    priceFrom: 15,
+    licenseOptions: LOOP_LICENSES,
     splits: [{ collaboratorId: "self", payoutPercent: 100 }],
     coverImage: "/images/beats/warm-room-loop-pack.jpg",
     previewSrc: "/audio/warm-room-loop-pack-preview.mp3",
@@ -342,8 +369,8 @@ export const beats: Beat[] = [
     genre: "Drill",
     moods: ["Dark", "Driving"],
     tags: ["loops", "distorted", "drill"],
-    priceFrom: 29,
-    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    priceFrom: 15,
+    licenseOptions: LOOP_LICENSES,
     splits: [{ collaboratorId: "self", payoutPercent: 100 }],
     coverImage: "/images/beats/drill-cuts-loop-pack.jpg",
     previewSrc: "/audio/drill-cuts-loop-pack-preview.mp3",
@@ -427,8 +454,8 @@ export const beats: Beat[] = [
     genre: "Sample Kit",
     moods: ["Cinematic", "Lush", "Mellow"],
     tags: ["drums", "guitar one-shots", "tags", "WAV"],
-    priceFrom: 39,
-    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    priceFrom: 15,
+    licenseOptions: LOOP_LICENSES,
     splits: [{ collaboratorId: "self", payoutPercent: 100 }],
     coverImage: "/images/beats/studio-kit-vol-1.jpg",
     previewSrc: "/audio/studio-kit-vol-1-preview.mp3",
@@ -445,8 +472,8 @@ export const beats: Beat[] = [
     genre: "Sample Kit",
     moods: ["Hard", "Driving"],
     tags: ["drums", "808s", "trap", "WAV"],
-    priceFrom: 39,
-    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    priceFrom: 15,
+    licenseOptions: LOOP_LICENSES,
     splits: [{ collaboratorId: "self", payoutPercent: 100 }],
     coverImage: "/images/beats/studio-kit-vol-2.jpg",
     previewSrc: "/audio/studio-kit-vol-2-preview.mp3",
@@ -467,7 +494,7 @@ export const beats: Beat[] = [
     genre: "Hip-Hop",
     moods: ["Driving", "Cinematic"],
     tags: ["gunna type", "melodic trap", "808s", "co-prod barragini"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     // GUESS — 60/40 split between Nathan and Barragini. Adjust once Nathan confirms.
     splits: [
@@ -480,6 +507,7 @@ export const beats: Beat[] = [
     durationSeconds: 192, // GUESS — actual file is ~3:12 at 320kbps; confirm
     description:
       "Melodic 120 BPM hip-hop in the Gunna lane — bright lead, sliding 808s, room for a vocal to ride the pocket. Co-produced with Barragini.",
+    featured: true,
   },
   // BPM from filename. "(afro)" prefix suggests Afrobeats/afro-fusion — guessed
   // genre and mood accordingly. Confirm with Nathan.
@@ -492,7 +520,7 @@ export const beats: Beat[] = [
     genre: "Afrobeats",
     moods: ["Driving", "Lush"],
     tags: ["afro", "live percussion", "co-prod barragini"],
-    priceFrom: 49,
+    priceFrom: 50,
     licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 50 },
@@ -504,6 +532,31 @@ export const beats: Beat[] = [
     durationSeconds: 198, // GUESS — confirm
     description:
       "Afrobeats instrumental at 98 BPM — warm guitar over live percussion. Built for a vocal hook to ride. Co-produced with Barragini.",
+    featured: true,
+  },
+  // Filename was "Ivy League - 95bpm Am @barragini @nathan.mp3" — key is confirmed (A minor).
+  {
+    slug: "ivy-league",
+    title: "Ivy League",
+    productType: "beat",
+    bpm: 95,
+    key: "A minor",
+    genre: "Hip-Hop",
+    moods: ["Cinematic", "Lush"],
+    tags: ["co-prod barragini", "smooth"],
+    priceFrom: 50,
+    licenseOptions: STANDARD_LICENSES,
+    splits: [
+      { collaboratorId: "self", payoutPercent: 50 },
+      { collaboratorId: "barragini", payoutPercent: 50 },
+    ],
+    coverImage: "/images/beats/ivy-league.jpg",
+    previewSrc: "/audio/ivy-league-preview.mp3",
+    releasedAt: "2026-05-08",
+    durationSeconds: 168, // GUESS — actual length around 2:48
+    description:
+      "95 BPM hip-hop in A minor — clean, collegiate vibe. Built for a verse that wants to feel literate. Co-produced with Barragini.",
+    featured: true,
   },
 ];
 

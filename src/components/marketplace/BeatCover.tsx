@@ -32,6 +32,13 @@ export function BeatCover({ beat, className }: { beat: Beat; className?: string 
             <stop offset="0%" stopColor={art.palette.glow} stopOpacity="0.55" />
             <stop offset="60%" stopColor={art.palette.glow} stopOpacity="0" />
           </radialGradient>
+          {art.palette.baseGradient && (
+            <linearGradient id={`${id}-base-grad`} x1="0" x2="0" y1="0" y2="1">
+              {art.palette.baseGradient.map((s, i) => (
+                <stop key={i} offset={s.offset} stopColor={s.color} />
+              ))}
+            </linearGradient>
+          )}
           <radialGradient id={`${id}-vignette`} cx="0.5" cy="0.5" r="0.85">
             <stop offset="60%" stopColor="rgba(0,0,0,0)" />
             <stop offset="100%" stopColor="rgba(0,0,0,0.5)" />
@@ -53,8 +60,15 @@ export function BeatCover({ beat, className }: { beat: Beat; className?: string 
           </filter>
         </defs>
 
-        {/* Saturated base */}
-        <rect width="400" height="400" fill={art.palette.base} />
+        {/* Saturated base — solid, gradient, or split (top + accent bottom) */}
+        <rect
+          width="400"
+          height="400"
+          fill={art.palette.baseGradient ? `url(#${id}-base-grad)` : art.palette.base}
+        />
+        {art.palette.accent && (
+          <rect width="400" height="200" y="200" fill={art.palette.accent} />
+        )}
         <rect width="400" height="400" fill={`url(#${id}-glow)`} />
         <rect width="400" height="400" fill={`url(#${id}-vignette)`} />
 
@@ -121,7 +135,9 @@ type SilhouetteType =
   | "eye"
   | "wave"
   | "lightning"
-  | "leaf";
+  | "leaf"
+  | "palm"
+  | "roycehall";
 
 type Palette = {
   base: string;
@@ -129,6 +145,13 @@ type Palette = {
   subject: string;
   shadow: string;
   ink: string;
+  /**
+   * Optional second color painted as the bottom half of the cover, creating a
+   * horizontal split (e.g. UCLA blue/gold). Leave undefined for solid covers.
+   */
+  accent?: string;
+  /** Optional gradient stops for the base — used for "tropical" multi-stop fills. */
+  baseGradient?: { offset: string; color: string }[];
 };
 
 type CoverArt = {
@@ -234,6 +257,28 @@ const PALETTE = {
     shadow: "#000000",
     ink: "#dcdce0",
   },
+  // Tropical green — vertical gradient (deep teal → emerald → bright lime).
+  tropical: {
+    base: "#0a3a2a", // fallback if gradient not used
+    glow: "#5fffaa",
+    subject: "#000000", // solid black silhouette per client
+    shadow: "#000000",
+    ink: "#e6fff0",
+    baseGradient: [
+      { offset: "0%", color: "#0d4a3a" },
+      { offset: "55%", color: "#1f7a52" },
+      { offset: "100%", color: "#3eba7a" },
+    ],
+  },
+  // UCLA — top half UCLA blue, bottom half UCLA gold (split via accent field).
+  ucla: {
+    base: "#2774ae", // UCLA blue (top half)
+    glow: "#5da7d6",
+    subject: "#000000", // solid black Royce silhouette
+    shadow: "#000000",
+    ink: "#fff8d8",
+    accent: "#ffd100", // UCLA gold (bottom half)
+  },
 } as const;
 
 // Manual assignments — each beat curated rather than hash-randomized.
@@ -321,18 +366,25 @@ const COVER_ART: Record<string, CoverArt> = {
     palette: PALETTE.smoke,
   },
 
-  // Real uploads from Nathan's Drive
-  // Leaf — literal match to the silhouette name, on a deep rust palette
+  // Real uploads from Nathan's Drive — client-directed art:
+  // Leaf — solid black leaf silhouette on a purple gradient
   leaf: {
     silhouette: "leaf",
-    palette: PALETTE.rust,
+    palette: PALETTE.amethyst,
     cornerMark: true,
   },
-  // Vigo — afrobeat warmth, ember palette + flame
+  // Vigo — solid black palm tree silhouette on a tropical green gradient
   vigo: {
-    silhouette: "flame",
-    palette: PALETTE.ember,
-    glowCy: "0.65",
+    silhouette: "palm",
+    palette: PALETTE.tropical,
+    glowCy: "0.3",
+    cornerMark: true,
+  },
+  // Ivy League — Royce Hall silhouette on UCLA blue (top) + gold (bottom) split
+  "ivy-league": {
+    silhouette: "roycehall",
+    palette: PALETTE.ucla,
+    cornerMark: true,
   },
 };
 
@@ -375,6 +427,10 @@ function Silhouette({ type, fill }: { type: SilhouetteType; fill: string }) {
       return <LightningSil fill={fill} />;
     case "leaf":
       return <LeafSil fill={fill} />;
+    case "palm":
+      return <PalmSil fill={fill} />;
+    case "roycehall":
+      return <RoyceHallSil fill={fill} />;
   }
 }
 
@@ -569,6 +625,137 @@ function LightningSil({ fill }: { fill: string }) {
   return (
     <g transform="translate(200, 220)" fill={fill}>
       <path d="M 10 -120 L -45 0 L -5 0 L -30 110 L 50 -10 L 5 -10 L 35 -120 Z" />
+    </g>
+  );
+}
+
+function PalmSil({ fill }: { fill: string }) {
+  return (
+    <g transform="translate(200, 250)" fill={fill}>
+      {/* Curved leaning trunk — bottom right to top center, banana-curve */}
+      <path
+        d="M 16 130
+           C 8 80, -2 30, -8 -20
+           C -12 -60, -10 -100, -8 -130
+           L 4 -130
+           C 8 -100, 12 -60, 18 -20
+           C 26 30, 32 80, 36 130 Z"
+      />
+      {/* Trunk ring details */}
+      <ellipse cx="-2" cy="-50" rx="14" ry="3" opacity="0.55" />
+      <ellipse cx="0" cy="-20" rx="16" ry="3" opacity="0.55" />
+      <ellipse cx="6" cy="20" rx="18" ry="3" opacity="0.55" />
+      <ellipse cx="14" cy="60" rx="20" ry="3" opacity="0.55" />
+      <ellipse cx="22" cy="100" rx="22" ry="3" opacity="0.55" />
+
+      {/* Coconuts at the crown */}
+      <circle cx="-4" cy="-128" r="6" />
+      <circle cx="8" cy="-132" r="6" />
+      <circle cx="-12" cy="-122" r="5" opacity="0.85" />
+
+      {/* Fronds — long, curved, in all directions from the crown */}
+      {/* Upper-left arching frond */}
+      <path
+        d="M -6 -130
+           C -40 -150, -90 -150, -140 -130
+           C -110 -148, -70 -160, -30 -158
+           C -16 -154, -10 -144, -4 -136 Z"
+      />
+      {/* Upper-right arching frond */}
+      <path
+        d="M 4 -130
+           C 40 -150, 90 -150, 140 -130
+           C 110 -150, 70 -160, 30 -160
+           C 16 -156, 8 -144, 6 -136 Z"
+      />
+      {/* Top vertical frond */}
+      <path
+        d="M -2 -130
+           C -10 -170, -2 -200, 14 -200
+           C 14 -180, 10 -160, 4 -136 Z"
+      />
+      {/* Mid-left curving frond */}
+      <path
+        d="M -8 -126
+           C -60 -110, -120 -90, -150 -50
+           C -120 -80, -80 -110, -40 -120
+           C -22 -124, -12 -126, -8 -128 Z"
+      />
+      {/* Mid-right curving frond */}
+      <path
+        d="M 6 -126
+           C 60 -110, 120 -90, 160 -60
+           C 130 -90, 90 -116, 50 -126
+           C 30 -128, 14 -130, 8 -130 Z"
+      />
+      {/* Lower-left frond drooping */}
+      <path
+        d="M -10 -118
+           C -50 -90, -100 -80, -130 -50
+           C -110 -90, -70 -110, -30 -120
+           C -18 -122, -14 -120, -10 -120 Z"
+        opacity="0.85"
+      />
+      {/* Lower-right frond drooping */}
+      <path
+        d="M 8 -118
+           C 50 -90, 100 -80, 130 -50
+           C 110 -90, 70 -110, 30 -120
+           C 18 -122, 12 -120, 8 -120 Z"
+        opacity="0.85"
+      />
+    </g>
+  );
+}
+
+function RoyceHallSil({ fill }: { fill: string }) {
+  return (
+    <g transform="translate(200, 240)" fill={fill}>
+      {/* Foundation / base */}
+      <rect x="-150" y="60" width="300" height="14" />
+
+      {/* Main facade body */}
+      <rect x="-120" y="-30" width="240" height="90" />
+
+      {/* Triangular gable / pediment between towers */}
+      <path d="M -80 -30 L 0 -90 L 80 -30 Z" />
+
+      {/* Large central archway */}
+      <path
+        d="M -28 60 L -28 -10 C -28 -28, 28 -28, 28 -10 L 28 60 Z"
+        fill="rgba(0,0,0,0.6)"
+      />
+
+      {/* Side arch windows (smaller) */}
+      <path
+        d="M -90 60 L -90 8 C -90 -2, -64 -2, -64 8 L -64 60 Z"
+        fill="rgba(0,0,0,0.55)"
+      />
+      <path
+        d="M 64 60 L 64 8 C 64 -2, 90 -2, 90 8 L 90 60 Z"
+        fill="rgba(0,0,0,0.55)"
+      />
+
+      {/* LEFT TOWER */}
+      <rect x="-160" y="-80" width="44" height="150" />
+      {/* Tower windows (3 stacked) */}
+      <rect x="-150" y="-66" width="24" height="18" fill="rgba(0,0,0,0.55)" />
+      <rect x="-150" y="-38" width="24" height="18" fill="rgba(0,0,0,0.55)" />
+      <rect x="-150" y="-10" width="24" height="18" fill="rgba(0,0,0,0.55)" />
+      {/* Tower crown */}
+      <rect x="-164" y="-92" width="52" height="14" />
+      {/* Tower spire/cap */}
+      <rect x="-150" y="-110" width="24" height="20" />
+      <path d="M -148 -110 L -138 -130 L -128 -110 Z" />
+
+      {/* RIGHT TOWER (mirror) */}
+      <rect x="116" y="-80" width="44" height="150" />
+      <rect x="126" y="-66" width="24" height="18" fill="rgba(0,0,0,0.55)" />
+      <rect x="126" y="-38" width="24" height="18" fill="rgba(0,0,0,0.55)" />
+      <rect x="126" y="-10" width="24" height="18" fill="rgba(0,0,0,0.55)" />
+      <rect x="112" y="-92" width="52" height="14" />
+      <rect x="126" y="-110" width="24" height="20" />
+      <path d="M 128 -110 L 138 -130 L 148 -110 Z" />
     </g>
   );
 }

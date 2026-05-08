@@ -51,12 +51,8 @@ export function FilterBar({ filters, onChange, resultCount }: Props) {
 
   return (
     <aside
-      className="sticky top-12 z-30 -mx-4 mb-8 border-b px-4 py-5"
-      style={{
-        borderColor: "var(--line)",
-        background: "color-mix(in srgb, var(--bg) 90%, transparent)",
-        backdropFilter: "saturate(180%) blur(20px)",
-      }}
+      className="mb-8 border-b pb-6"
+      style={{ borderColor: "var(--line)" }}
     >
       <div className="flex flex-wrap items-center gap-3">
         <input
