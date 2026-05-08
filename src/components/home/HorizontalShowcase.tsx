@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   motion,
   useScroll,
@@ -10,17 +10,19 @@ import {
 } from "framer-motion";
 
 /**
- * HorizontalShowcase — scroll-jacked horizontal panel slider, ONE-SHOT.
+ * HorizontalShowcase — scroll-jacked horizontal panel slider, ONE-SHOT per page load.
  *
- * On the first pass: section is pinned and panels pan horizontally as the user
- * scrolls vertically through it. The user is forced to "swipe right once."
+ * Behavior:
+ * - First time the user scrolls through it on this page load: section is pinned,
+ *   panels pan horizontally as the user scrolls vertically.
+ * - Once the user reaches the end of the pan, the section flips to a flat
+ *   horizontal-snap row for the rest of this page view — they can scroll up
+ *   without getting re-trapped.
+ * - On hard refresh / new visit: the consumed flag resets. The user is required
+ *   to scroll through it once again. (Client requested: "Doesn't require first
+ *   scroll-through on the modules when u refresh.")
  *
- * Once the user reaches the end of the pan, we mark the section consumed and
- * persist that flag in sessionStorage. From then on (this session), the section
- * collapses to a single-screen horizontal-scroll row — no more scroll-jacking.
- *
- * Result: scrolling the page later (or coming back from another route) doesn't
- * trap the user in the showcase again.
+ * No persistent storage. State is component-local — resets on every mount.
  */
 
 type Panel = {
@@ -61,37 +63,15 @@ const panels: Panel[] = [
   },
 ];
 
-const STORAGE_KEY = "showcase-consumed";
-
 export function HorizontalShowcase() {
   const reduced = useReducedMotion();
-  const [consumed, setConsumed] = useState<boolean | null>(null);
-
-  // Hydrate from sessionStorage. While null, render nothing (avoids flicker).
-  useEffect(() => {
-    try {
-      setConsumed(sessionStorage.getItem(STORAGE_KEY) === "1");
-    } catch {
-      setConsumed(false);
-    }
-  }, []);
+  // Per-mount only — no persistence. Refresh resets the experience.
+  const [consumed, setConsumed] = useState(false);
 
   if (reduced) return <FallbackStack />;
-  if (consumed === null) return <div style={{ height: "100vh" }} />;
   if (consumed) return <PassThroughRow />;
 
-  return (
-    <ScrollJackedShowcase
-      onConsumed={() => {
-        try {
-          sessionStorage.setItem(STORAGE_KEY, "1");
-        } catch {
-          // ignore
-        }
-        setConsumed(true);
-      }}
-    />
-  );
+  return <ScrollJackedShowcase onConsumed={() => setConsumed(true)} />;
 }
 
 /* ---------------- Scroll-jacked first pass ---------------- */

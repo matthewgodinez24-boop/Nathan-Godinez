@@ -2,44 +2,60 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { site } from "@/data/site";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 
 /**
- * Floating header. No filled bar, no black strip.
- * Over the hero (white text on photo). After scrolling past the hero, swap to
- * theme text + a hairline glass strip — never a heavy bar.
+ * Floating header.
+ *
+ * - On the home page (which leads with a full-bleed dark photo): nav text is
+ *   white at the top, then transitions to glass + theme color once scrolled
+ *   past the hero.
+ * - On every other route: always glass + theme color (no photo behind the nav,
+ *   so white-over-light would be invisible).
+ *
+ * This bug was reported by the client: "Light vs dark mode doesn't change
+ * the text where it needs to change. Such as the Store."
  */
 export function Header() {
+  const pathname = usePathname();
+  const isHome = pathname === "/";
   const [pastHero, setPastHero] = useState(false);
 
   useEffect(() => {
+    if (!isHome) {
+      // Other routes: header is always in "past hero" mode (glass + theme color).
+      setPastHero(true);
+      return;
+    }
     const onScroll = () => {
-      // Switch state once we've cleared most of the hero — the photo ends around 100dvh.
       const threshold = Math.max(window.innerHeight * 0.85, 480);
       setPastHero(window.scrollY > threshold);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [isHome]);
+
+  // Floating-white state only happens on the homepage above the hero.
+  const isFloatingWhite = isHome && !pastHero;
 
   return (
     <header
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background,backdrop-filter,border-color,color] duration-500",
-        pastHero ? "border-b" : "border-b border-transparent",
+        isFloatingWhite ? "border-b border-transparent" : "border-b",
       )}
       style={{
-        // Transparent over hero; soft glass + hairline once past it.
-        background: pastHero
-          ? "color-mix(in srgb, var(--bg) 72%, transparent)"
-          : "transparent",
-        backdropFilter: pastHero ? "saturate(180%) blur(20px)" : "none",
-        WebkitBackdropFilter: pastHero ? "saturate(180%) blur(20px)" : "none",
-        borderColor: pastHero ? "var(--line)" : "transparent",
-        color: pastHero ? "var(--fg)" : "#ffffff",
+        background: isFloatingWhite
+          ? "transparent"
+          : "color-mix(in srgb, var(--bg) 72%, transparent)",
+        backdropFilter: isFloatingWhite ? "none" : "saturate(180%) blur(20px)",
+        WebkitBackdropFilter: isFloatingWhite ? "none" : "saturate(180%) blur(20px)",
+        borderColor: isFloatingWhite ? "transparent" : "var(--line)",
+        color: isFloatingWhite ? "#ffffff" : "var(--fg)",
       }}
     >
       <nav className="relative flex h-12 items-center text-[13px]">
