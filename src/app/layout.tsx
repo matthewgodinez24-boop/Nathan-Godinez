@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { SmoothScroll } from "@/components/SmoothScroll";
 import { site } from "@/data/site";
 import { validateAllBeats } from "@/lib/payouts";
 import { beats } from "@/data/beats";
@@ -41,6 +42,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-dvh antialiased">
+        <SmoothScroll />
         <Header />
         <main>{children}</main>
         <Footer />

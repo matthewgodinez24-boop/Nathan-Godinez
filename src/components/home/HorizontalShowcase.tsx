@@ -7,7 +7,6 @@ import {
   useTransform,
   useMotionValueEvent,
   useReducedMotion,
-  useSpring,
 } from "framer-motion";
 
 /**
@@ -111,22 +110,26 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
   });
 
   const panelCount = panels.length;
-  // Slightly tighter than before — less scroll required per panel.
-  const wrapperVh = (panelCount - 1) * 100 + 100; // total height in vh
+  // Total wrapper height in vh — give the user a generous track to travel through.
+  // Per-panel feel: roughly 1.2× viewport of vertical scroll buys you a full panel
+  // shift, which lines up with how Apple paces their scroll-linked sections.
+  const wrapperVh = (panelCount - 1) * 120 + 100;
   const translatePct = -((panelCount - 1) * 100);
-  const xRaw = useTransform(
+  /**
+   * No spring. Lenis (mounted globally in layout.tsx) already lerps scrollY on
+   * a per-frame basis, so by the time scrollYProgress reaches us it's already a
+   * smooth, continuous signal. Mapping it 1:1 to the horizontal translate gives
+   * a tight, "I'm scrolling and the panels are moving in lockstep" feel — which
+   * is precisely the Apple product-page sensation.
+   *
+   * The 0.05/0.95 padding leaves the first and last panels sitting fully on
+   * screen at the start and end of the section.
+   */
+  const x = useTransform(
     scrollYProgress,
     [0.05, 0.95],
     ["0%", `${translatePct}%`],
   );
-  // Smooth the raw mapped value with a spring — kills the chunky 1:1 stutter that
-  // happens when scroll deltas are large (trackpad flicks, mouse wheel jumps).
-  const x = useSpring(xRaw, {
-    stiffness: 90,
-    damping: 26,
-    mass: 0.6,
-    restDelta: 0.001,
-  });
 
   // Mark consumed once the user reaches the end of the horizontal pan.
   useMotionValueEvent(scrollYProgress, "change", (v) => {
@@ -141,7 +144,17 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
       className="relative"
     >
       <div className="sticky top-0 h-dvh overflow-hidden">
-        <motion.div style={{ x }} className="flex h-full">
+        <motion.div
+          style={{
+            x,
+            // Hint the browser to composite this layer on the GPU. Without this,
+            // big horizontal translates can repaint the entire row each frame,
+            // which is one of the things that made the old version feel chunky.
+            willChange: "transform",
+            backfaceVisibility: "hidden",
+          }}
+          className="flex h-full"
+        >
           {panels.map((p, i) => (
             <PanelSlide key={p.title} panel={p} index={i} total={panelCount} />
           ))}
