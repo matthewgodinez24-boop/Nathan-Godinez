@@ -42,15 +42,16 @@ export function Header() {
         color: pastHero ? "var(--fg)" : "#ffffff",
       }}
     >
-      <nav className="container-x flex h-12 items-center justify-between text-[13px]">
-        {/* Brand sits flush to the left edge — only this element gets the nudge */}
+      <nav className="relative flex h-12 items-center text-[13px]">
+        {/* Brand pinned to viewport left edge — independent of container padding */}
         <Link
           href="/"
-          className="display tracking-tight text-[14px] transition-colors -ml-[clamp(0.75rem,2.5vw,2rem)]"
+          className="display absolute left-3 sm:left-4 tracking-tight text-[14px] transition-colors"
         >
           Made By {site.artist.name}
         </Link>
-        <div className="flex items-center gap-7">
+        {/* Nav stays in the standard container on the right */}
+        <div className="ml-auto container-x flex items-center justify-end gap-7">
           <ul className="flex items-center gap-7">
             {site.nav.map((item) => (
               <li key={item.href}>

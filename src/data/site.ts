@@ -25,7 +25,7 @@ export const site = {
 
   // Navigation
   nav: [
-    { label: "Beats", href: "/beats" },
+    { label: "Store", href: "/beats" },
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
   ],
@@ -33,7 +33,7 @@ export const site = {
   // Hero — top of homepage
   hero: {
     eyebrow: "New release",
-    headline: "Instrumentalist, Producer, Composer",
+    headline: "Instrumentalist Producer Composer",
     sub:
       "Original instrumentals and guitar-led collaborations, built for artists who " +
       "care how a record sounds in the room.",
