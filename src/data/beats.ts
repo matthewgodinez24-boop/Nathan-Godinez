@@ -374,7 +374,6 @@ export const beats: Beat[] = [
     releasedAt: "2026-04-04",
     durationSeconds: 218,
     description: "Finished record. Vocal feature included. Available for sync.",
-    featured: true,
   },
 
   /* ---- SCORES ---- */

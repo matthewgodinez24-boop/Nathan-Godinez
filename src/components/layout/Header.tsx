@@ -66,8 +66,8 @@ export function Header() {
         >
           Made By {site.artist.name}
         </Link>
-        {/* Nav stays in the standard container on the right */}
-        <div className="ml-auto container-x flex items-center justify-end gap-7">
+        {/* Nav pinned to the right edge of the viewport */}
+        <div className="ml-auto flex items-center gap-7 pr-3 sm:pr-5">
           <ul className="flex items-center gap-7">
             {site.nav.map((item) => (
               <li key={item.href}>

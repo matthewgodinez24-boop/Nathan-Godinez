@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   motion,
   useScroll,
@@ -67,11 +67,37 @@ export function HorizontalShowcase() {
   const reduced = useReducedMotion();
   // Per-mount only — no persistence. Refresh resets the experience.
   const [consumed, setConsumed] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Bug the client reported: "After the part where it swipes right, when it
+   * ends the swiping it teleports to the featured beats portion."
+   *
+   * Cause: the scroll-jacked wrapper is ~3× viewport tall. When we collapse it
+   * to the 100vh PassThroughRow, the page reflows and everything below jumps
+   * up by ~2 viewports — the user is suddenly in FeaturedBeats.
+   *
+   * Fix: when the swap happens, immediately scroll the user to the bottom of
+   * the new compact section. They land exactly where they expected: just past
+   * the showcase, ready to scroll into FeaturedBeats normally.
+   */
+  useEffect(() => {
+    if (!consumed || !containerRef.current) return;
+    const top = containerRef.current.offsetTop;
+    window.scrollTo({ top: top + window.innerHeight, behavior: "auto" });
+  }, [consumed]);
 
   if (reduced) return <FallbackStack />;
-  if (consumed) return <PassThroughRow />;
 
-  return <ScrollJackedShowcase onConsumed={() => setConsumed(true)} />;
+  return (
+    <div ref={containerRef}>
+      {consumed ? (
+        <PassThroughRow />
+      ) : (
+        <ScrollJackedShowcase onConsumed={() => setConsumed(true)} />
+      )}
+    </div>
+  );
 }
 
 /* ---------------- Scroll-jacked first pass ---------------- */

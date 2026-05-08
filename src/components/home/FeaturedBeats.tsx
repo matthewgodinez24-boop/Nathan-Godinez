@@ -11,14 +11,16 @@ export function FeaturedBeats() {
       <div className="container-x">
         <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <ScrollReveal>
+            {/* Display treatment: "FEATURED" uppercase, "music" lowercase, per client. */}
             <h2 className="display max-w-2xl text-[clamp(2rem,4.5vw,3.5rem)]">
-              Featured beats.
+              <span className="uppercase">Featured</span>{" "}
+              <span className="lowercase">music</span>.
             </h2>
             <p
               className="mt-3 max-w-md text-[15px]"
               style={{ color: "var(--fg-soft)" }}
             >
-              Three current favorites from the catalog. The full marketplace has the rest.
+              Three current favorites from the catalog. The full store has the rest.
             </p>
           </ScrollReveal>
           <ScrollReveal delay={0.1}>
@@ -27,7 +29,7 @@ export function FeaturedBeats() {
               className="text-[15px] underline-offset-4 hover:underline"
               style={{ color: "var(--color-accent)" }}
             >
-              Browse all beats →
+              Browse all →
             </Link>
           </ScrollReveal>
         </div>
