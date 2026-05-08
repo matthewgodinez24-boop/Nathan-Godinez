@@ -1,205 +1,217 @@
 "use client";
 
 import { useRef } from "react";
-import {
-  motion,
-  useScroll,
-  useTransform,
-  useReducedMotion,
-} from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import { Pedal, type PedalConfig } from "./Pedal";
 
 /**
- * HorizontalShowcase — Apple-style scroll-jacked horizontal panel slider.
+ * HorizontalShowcase — pedalboard, displayed as a single-viewport horizontal scroller.
  *
- * The outer wrapper is tall (height = number-of-panels × 100vh). Inside, a sticky
- * viewport pins to the screen and translates a horizontal track left as the user
- * scrolls down. Scrolling back up reverses the slide. Honors prefers-reduced-motion.
+ * One section, one screen tall. User swipes / horizontal-scrolls through pedals.
+ * No scroll-jacking — once you scroll past the section, you're past it for good.
  *
- * Edit content by changing the `panels` array below.
+ * Design: precise pedalboard frame (charcoal cabinet, hairline rule, leather-grain undertone),
+ * four pedals with consistent enclosure, varying finish + knob layout per theme.
  */
 
-type Panel = {
-  eyebrow: string;
-  title: string;
-  body: string;
-  // CSS background string applied to the panel (gradient by default; swap for an image)
-  background: string;
-};
-
-const panels: Panel[] = [
+const pedals: PedalConfig[] = [
   {
-    eyebrow: "01 — Tone",
-    title: "Tracked through analog.",
-    body: "Every guitar passes through tube amps, tape saturation, and a real room before it ever hits the DAW.",
-    background:
-      "radial-gradient(60% 60% at 30% 30%, rgba(126,87,194,0.55), transparent 60%), linear-gradient(135deg, #100912, #2a1336 65%, #4a1d4a)",
+    id: "tone",
+    index: "01",
+    label: "TONE",
+    headline: "Tracked through analog.",
+    body: "Tube amps, tape saturation, a real room. The signal chain is the song.",
+    finish: "amber",
+    layout: "single",
+    knobs: [{ label: "TONE", angle: 35 }, { label: "GAIN", angle: -22 }],
+    ledColor: "#ff5a3c",
+    sublabel: "ANALOG SIGNAL CHAIN",
   },
   {
-    eyebrow: "02 — Craft",
-    title: "Written like a song.",
-    body: "Beats with structure. Verses, lifts, bridges — built so a vocal can live in them, not survive them.",
-    background:
-      "radial-gradient(60% 60% at 70% 35%, rgba(255,154,0,0.4), transparent 60%), linear-gradient(135deg, #1a0e07, #3a1e0c 60%, #6b2f12)",
+    id: "craft",
+    index: "02",
+    label: "CRAFT",
+    headline: "Written like a song.",
+    body: "Verses, lifts, bridges, drops. Beats with structure so a vocal can live in them.",
+    finish: "ivory",
+    layout: "quad",
+    knobs: [
+      { label: "VERSE", angle: -45 },
+      { label: "LIFT", angle: 20 },
+      { label: "BRIDGE", angle: 60 },
+      { label: "DROP", angle: -10 },
+    ],
+    ledColor: "#5fd47a",
+    sublabel: "STRUCTURE FIRST",
   },
   {
-    eyebrow: "03 — Collaboration",
-    title: "Built with other artists.",
-    body: "Vocalists, co-producers, engineers, visual artists. Every release ships with credits and transparent splits.",
-    background:
-      "radial-gradient(60% 60% at 50% 30%, rgba(0,180,255,0.4), transparent 60%), linear-gradient(135deg, #051018, #0d2238 65%, #163c5a)",
+    id: "collab",
+    index: "03",
+    label: "COLLAB",
+    headline: "Built with other artists.",
+    body: "Vocalists, co-producers, engineers. Every release ships with credits and transparent splits.",
+    finish: "cobalt",
+    layout: "dual-channel",
+    knobs: [
+      { label: "VOX", angle: 30 },
+      { label: "PROD", angle: -10 },
+    ],
+    ledColor: "#5ab8ff",
+    sublabel: "TWO CHANNELS, ONE RECORD",
   },
   {
-    eyebrow: "04 — Finish",
-    title: "Mixed for streaming.",
-    body: "Loud where loud belongs, quiet where it counts. Masters checked across earbuds, monitors, and the car.",
-    background:
-      "radial-gradient(60% 60% at 40% 30%, rgba(255,210,140,0.3), transparent 60%), linear-gradient(135deg, #0f0f0f, #1f1c19 65%, #3a3128)",
+    id: "finish",
+    index: "04",
+    label: "FINISH",
+    headline: "Mixed for streaming.",
+    body: "Loud where loud belongs, quiet where it counts. Checked across earbuds, monitors, and the car.",
+    finish: "midnight",
+    layout: "vu-meter",
+    knobs: [
+      { label: "OUT", angle: 15 },
+      { label: "GAIN", angle: -30 },
+    ],
+    ledColor: "#ffb84a",
+    sublabel: "MASTERED FOR LOUD AND QUIET",
   },
 ];
 
 export function HorizontalShowcase() {
   const reduced = useReducedMotion();
-  const wrapperRef = useRef<HTMLElement | null>(null);
-  const { scrollYProgress } = useScroll({
-    target: wrapperRef,
-    offset: ["start start", "end end"],
-  });
-
-  // The track holds N panels side by side. We translate it left across (N-1) widths.
-  // Edges of the scroll range are snapped slightly so the first/last panels rest fully on screen.
-  const panelCount = panels.length;
-  const translatePct = -((panelCount - 1) * 100);
-  const x = useTransform(
-    scrollYProgress,
-    [0.05, 0.95],
-    reduced ? ["0%", "0%"] : ["0%", `${translatePct}%`],
-  );
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <section
-      ref={wrapperRef}
       aria-label="What goes into a Nathan Godinez record"
-      // Total scroll height = N panels * 100vh — gives room for the horizontal pan.
-      // Reduced-motion users get a single-screen tall section that just stacks vertically below.
-      style={{ height: reduced ? "auto" : `${panelCount * 100}vh` }}
-      className="relative"
+      className="relative isolate overflow-hidden"
+      style={{
+        // Pedalboard cabinet — deep charcoal with a soft warm spotlight
+        background:
+          "radial-gradient(80% 60% at 50% 35%, #1a1614 0%, #0c0a09 60%, #060504 100%)",
+      }}
     >
-      {reduced ? (
-        // Reduced-motion fallback: vertical stack, no scroll-jacking.
-        <div className="container-x section grid gap-8">
-          {panels.map((p) => (
-            <PanelCard key={p.title} panel={p} />
-          ))}
-        </div>
-      ) : (
-        <div className="sticky top-0 h-dvh overflow-hidden">
-          <motion.div
-            style={{ x }}
-            className="flex h-full"
-          >
-            {panels.map((p, i) => (
-              <PanelSlide key={p.title} panel={p} index={i} total={panelCount} />
-            ))}
-          </motion.div>
+      {/* Hairline rules — the wooden rails of a real pedalboard */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-12 h-px"
+        style={{
+          background:
+            "linear-gradient(to right, transparent, rgba(255,255,255,0.08) 20%, rgba(255,255,255,0.08) 80%, transparent)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-12 h-px"
+        style={{
+          background:
+            "linear-gradient(to right, transparent, rgba(255,255,255,0.08) 20%, rgba(255,255,255,0.08) 80%, transparent)",
+        }}
+      />
 
-          {/* Progress dots */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-2"
-          >
-            {panels.map((_, i) => (
-              <ProgressDot
-                key={i}
-                index={i}
-                total={panelCount}
-                progress={scrollYProgress}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Subtle film grain over the cabinet */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.04] mix-blend-overlay"
+        style={{
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>")`,
+        }}
+      />
+
+      {/* Section header */}
+      <div className="container-x pb-8 pt-24 text-white">
+        <p className="text-[12px] uppercase tracking-[0.25em] opacity-60">
+          The Signal Chain
+        </p>
+        <h2 className="display mt-3 max-w-3xl text-[clamp(2rem,4.5vw,3.5rem)]">
+          Four stages, one record.
+        </h2>
+        <p className="mt-3 max-w-md text-[14px] opacity-70">
+          Swipe through the pedals — tone, craft, collaboration, finish.
+        </p>
+      </div>
+
+      {/* The scroller */}
+      <div className="relative">
+        <motion.div
+          ref={scrollerRef}
+          initial={reduced ? false : { opacity: 0 }}
+          whileInView={reduced ? undefined : { opacity: 1 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-20 pl-[max(2.5rem,calc((100vw-1280px)/2+1.25rem))] pr-[max(2.5rem,calc((100vw-1280px)/2+1.25rem))]"
+          style={{
+            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          {pedals.map((p, i) => (
+            <PedalPanel key={p.id} pedal={p} index={i} reduced={!!reduced} />
+          ))}
+        </motion.div>
+
+        {/* Edge fades */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-24"
+          style={{
+            background: "linear-gradient(to right, #060504, transparent)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-24"
+          style={{
+            background: "linear-gradient(to left, #060504, transparent)",
+          }}
+        />
+      </div>
+
+      {/* Bottom rail w/ counter */}
+      <div className="container-x flex items-center justify-between pb-16 text-[11px] uppercase tracking-[0.25em] text-white/45">
+        <span>Drag · swipe · arrows</span>
+        <span>{pedals.length} pedals</span>
+      </div>
+
+      {/* Hide horizontal scrollbar */}
+      <style>{`
+        section [class*="snap-x"]::-webkit-scrollbar { display: none; }
+      `}</style>
     </section>
   );
 }
 
-function PanelSlide({
-  panel,
+function PedalPanel({
+  pedal,
   index,
-  total,
+  reduced,
 }: {
-  panel: Panel;
+  pedal: PedalConfig;
   index: number;
-  total: number;
+  reduced: boolean;
 }) {
-  // Subtle parallax: text slides in slightly lagged behind the track travel
   return (
-    <div
-      className="relative flex h-full w-screen shrink-0 items-center"
-      style={{ background: panel.background }}
+    <motion.article
+      initial={reduced ? false : { opacity: 0, y: 24 }}
+      whileInView={reduced ? undefined : { opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.4 }}
+      transition={{
+        duration: 0.9,
+        ease: [0.16, 1, 0.3, 1],
+        delay: reduced ? 0 : index * 0.08,
+      }}
+      className="flex w-[min(86vw,640px)] shrink-0 snap-center flex-col items-center text-center text-white md:w-[min(70vw,540px)]"
     >
-      {/* Soft vignette */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 80% at 50% 60%, transparent, rgba(0,0,0,0.45) 100%)",
-        }}
-      />
-      <div className="container-x relative z-10 grid gap-8 text-white md:grid-cols-12">
-        <div className="md:col-span-7 md:col-start-2">
-          <p className="text-[12px] uppercase tracking-[0.25em] opacity-75">
-            {panel.eyebrow}
-          </p>
-          <h3 className="display mt-4 text-[clamp(2.5rem,7vw,5.5rem)]">
-            {panel.title}
-          </h3>
-          <p className="mt-6 max-w-xl text-[clamp(1rem,1.5vw,1.25rem)] opacity-85">
-            {panel.body}
-          </p>
-        </div>
-        <div className="absolute bottom-8 right-8 text-[12px] uppercase tracking-[0.25em] opacity-60">
-          {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
-        </div>
-      </div>
-    </div>
-  );
-}
+      <Pedal config={pedal} className="w-[min(72vw,360px)]" />
 
-function PanelCard({ panel }: { panel: Panel }) {
-  // Reduced-motion variant — same content, vertical card, no panning
-  return (
-    <div
-      className="relative overflow-hidden rounded-3xl p-10 text-white"
-      style={{ background: panel.background }}
-    >
-      <p className="text-[12px] uppercase tracking-[0.25em] opacity-75">
-        {panel.eyebrow}
+      <p className="mt-8 text-[11px] uppercase tracking-[0.3em] opacity-60">
+        {pedal.index} — {pedal.label}
       </p>
-      <h3 className="display mt-3 text-[clamp(1.75rem,4vw,3rem)]">{panel.title}</h3>
-      <p className="mt-4 max-w-xl text-[15px] opacity-85">{panel.body}</p>
-    </div>
-  );
-}
-
-function ProgressDot({
-  index,
-  total,
-  progress,
-}: {
-  index: number;
-  total: number;
-  progress: ReturnType<typeof useScroll>["scrollYProgress"];
-}) {
-  // Each dot lights up when the slider is on its panel
-  const start = (index - 0.4) / (total - 1);
-  const end = (index + 0.4) / (total - 1);
-  const opacity = useTransform(progress, [start, end, end + 0.0001], [0.3, 1, 0.3]);
-  const scale = useTransform(progress, [start, end, end + 0.0001], [1, 1.4, 1]);
-  return (
-    <motion.span
-      style={{ opacity, scale }}
-      className="block h-1.5 w-6 rounded-full bg-white"
-    />
+      <h3 className="display mt-4 max-w-md text-[clamp(1.75rem,3vw,2.5rem)]">
+        {pedal.headline}
+      </h3>
+      <p className="mt-4 max-w-sm text-[14px] leading-relaxed opacity-75">
+        {pedal.body}
+      </p>
+    </motion.article>
   );
 }
