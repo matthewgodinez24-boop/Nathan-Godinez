@@ -8,13 +8,32 @@ type Props = {
   className?: string;
   // Compact = small inline button only (used in cards). Full = button + scrubber + time.
   compact?: boolean;
+  /**
+   * Where in the source file to start the preview, in seconds. Defaults to 0.
+   * Combined with `maxDurationSec`, this defines the [start, start + max) window
+   * the user can hear in the store.
+   */
+  startSec?: number;
+  /**
+   * Maximum length of the preview in seconds. Defaults to 10.
+   * Once playback hits this duration past start, audio pauses and resets.
+   */
+  maxDurationSec?: number;
 };
 
-export function AudioPreview({ src, className, compact = false }: Props) {
+const DEFAULT_MAX_DURATION = 10;
+
+export function AudioPreview({
+  src,
+  className,
+  compact = false,
+  startSec = 0,
+  maxDurationSec = DEFAULT_MAX_DURATION,
+}: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
+  // Progress is relative to the start of the window — 0..maxDurationSec.
+  const [windowProgress, setWindowProgress] = useState(0);
   const [unavailable, setUnavailable] = useState(!src);
 
   useEffect(() => {
@@ -25,25 +44,35 @@ export function AudioPreview({ src, className, compact = false }: Props) {
     const audio = new Audio(src);
     audio.preload = "metadata";
     audioRef.current = audio;
-    const onMeta = () => setDuration(audio.duration || 0);
-    const onTime = () => setProgress(audio.currentTime);
+
+    const onTime = () => {
+      const elapsed = audio.currentTime - startSec;
+      // If we've passed the 10s cap, stop and reset to the window start.
+      if (elapsed >= maxDurationSec) {
+        audio.pause();
+        audio.currentTime = startSec;
+        setWindowProgress(0);
+        setPlaying(false);
+        return;
+      }
+      setWindowProgress(Math.max(0, elapsed));
+    };
     const onEnd = () => {
+      audio.currentTime = startSec;
+      setWindowProgress(0);
       setPlaying(false);
-      setProgress(0);
     };
     const onError = () => setUnavailable(true);
-    audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("ended", onEnd);
     audio.addEventListener("error", onError);
     return () => {
       audio.pause();
-      audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("ended", onEnd);
       audio.removeEventListener("error", onError);
     };
-  }, [src]);
+  }, [src, startSec, maxDurationSec]);
 
   function toggle(e?: React.MouseEvent) {
     e?.preventDefault();
@@ -51,7 +80,17 @@ export function AudioPreview({ src, className, compact = false }: Props) {
     const audio = audioRef.current;
     if (!audio || unavailable) return;
     if (audio.paused) {
-      audio.play().then(() => setPlaying(true)).catch(() => setUnavailable(true));
+      // Always start from the window's start when (re-)playing.
+      if (
+        audio.currentTime < startSec ||
+        audio.currentTime >= startSec + maxDurationSec
+      ) {
+        audio.currentTime = startSec;
+      }
+      audio
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => setUnavailable(true));
     } else {
       audio.pause();
       setPlaying(false);
@@ -60,20 +99,20 @@ export function AudioPreview({ src, className, compact = false }: Props) {
 
   function seek(e: React.ChangeEvent<HTMLInputElement>) {
     const audio = audioRef.current;
-    if (!audio || !duration) return;
-    const t = (parseFloat(e.target.value) / 100) * duration;
-    audio.currentTime = t;
-    setProgress(t);
+    if (!audio) return;
+    const t = (parseFloat(e.target.value) / 100) * maxDurationSec;
+    audio.currentTime = startSec + t;
+    setWindowProgress(t);
   }
 
-  const pct = duration ? (progress / duration) * 100 : 0;
+  const pct = (windowProgress / maxDurationSec) * 100;
 
   if (compact) {
     return (
       <button
         type="button"
         onClick={toggle}
-        aria-label={playing ? "Pause preview" : "Play preview"}
+        aria-label={playing ? "Pause preview" : "Play 10-second preview"}
         className={cn(
           "flex h-9 w-9 items-center justify-center rounded-full transition",
           unavailable
@@ -92,7 +131,7 @@ export function AudioPreview({ src, className, compact = false }: Props) {
       <button
         type="button"
         onClick={toggle}
-        aria-label={playing ? "Pause preview" : "Play preview"}
+        aria-label={playing ? "Pause preview" : "Play 10-second preview"}
         disabled={unavailable}
         className={cn(
           "flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition",
@@ -118,13 +157,11 @@ export function AudioPreview({ src, className, compact = false }: Props) {
           className="mt-2 flex justify-between text-[11px]"
           style={{ color: "var(--fg-mute)" }}
         >
-          <span>{formatDuration(Math.floor(progress))}</span>
+          <span>{formatDuration(Math.floor(windowProgress))}</span>
           <span>
             {unavailable
               ? "Preview not yet uploaded"
-              : duration
-                ? formatDuration(Math.floor(duration))
-                : "--:--"}
+              : `0:${maxDurationSec.toString().padStart(2, "0")} preview`}
           </span>
         </div>
       </div>

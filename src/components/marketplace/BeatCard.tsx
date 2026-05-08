@@ -35,7 +35,11 @@ export function BeatCard({ beat }: { beat: Beat }) {
           }}
         />
         <div className="absolute bottom-3 right-3">
-          <AudioPreview src={beat.previewSrc} compact />
+          <AudioPreview
+            src={beat.previewSrc}
+            startSec={beat.previewStartSec ?? 0}
+            compact
+          />
         </div>
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           <span className="rounded-full bg-black/65 px-2.5 py-0.5 text-[11px] font-medium tracking-tight text-white backdrop-blur">

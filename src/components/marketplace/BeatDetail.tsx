@@ -84,7 +84,10 @@ export function BeatDetail({ beat }: { beat: Beat }) {
             </dl>
 
             <div className="mt-6">
-              <AudioPreview src={beat.previewSrc} />
+              <AudioPreview
+                src={beat.previewSrc}
+                startSec={beat.previewStartSec ?? 0}
+              />
             </div>
           </div>
         </div>

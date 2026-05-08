@@ -58,6 +58,12 @@ export type Beat = {
   title: string;
   // Product type — drives label, filter, and (eventually) delivery package contents
   productType: ProductType;
+  /**
+   * Where in the source preview file to start the 10-second sample, in seconds.
+   * Defaults to 0 (start at the beginning). The store always plays exactly 10s
+   * starting from this point. Nathan picks the value per beat via the studio.
+   */
+  previewStartSec?: number;
   bpm: number;
   // Musical key, e.g. "F# minor"
   key: string;
