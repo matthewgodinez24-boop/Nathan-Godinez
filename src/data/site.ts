@@ -20,7 +20,8 @@ export const site = {
   },
 
   // Domain + branding
-  domain: "https://example.com", // PLACEHOLDER — replace at launch
+  // Production deployment URL. Update if a custom domain is attached later.
+  domain: "https://nathan-godinez.vercel.app",
   brandColor: "#0a0a0a", // primary text color on light backgrounds; theme tweaks live in globals.css
 
   // Navigation

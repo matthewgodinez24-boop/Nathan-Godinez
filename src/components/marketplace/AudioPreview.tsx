@@ -34,20 +34,20 @@ export function AudioPreview({
   const [playing, setPlaying] = useState(false);
   // Progress is relative to the start of the window — 0..maxDurationSec.
   const [windowProgress, setWindowProgress] = useState(0);
-  const [unavailable, setUnavailable] = useState(!src);
+  // We remember *which* src errored, not a boolean — so when `src` changes the
+  // derived `errored` flag flips back to false automatically. No effect needed.
+  const [erroredSrc, setErroredSrc] = useState<string | null>(null);
+  const errored = !!src && erroredSrc === src;
+  const unavailable = !src || errored;
 
   useEffect(() => {
-    if (!src) {
-      setUnavailable(true);
-      return;
-    }
+    if (!src) return;
     const audio = new Audio(src);
     audio.preload = "metadata";
     audioRef.current = audio;
 
     const onTime = () => {
       const elapsed = audio.currentTime - startSec;
-      // If we've passed the 10s cap, stop and reset to the window start.
       if (elapsed >= maxDurationSec) {
         audio.pause();
         audio.currentTime = startSec;
@@ -62,7 +62,7 @@ export function AudioPreview({
       setWindowProgress(0);
       setPlaying(false);
     };
-    const onError = () => setUnavailable(true);
+    const onError = () => setErroredSrc(src);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("ended", onEnd);
     audio.addEventListener("error", onError);
@@ -90,7 +90,7 @@ export function AudioPreview({
       audio
         .play()
         .then(() => setPlaying(true))
-        .catch(() => setUnavailable(true));
+        .catch(() => setErroredSrc(src));
     } else {
       audio.pause();
       setPlaying(false);

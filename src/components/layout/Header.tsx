@@ -22,17 +22,16 @@ import { ThemeToggle } from "./ThemeToggle";
 export function Header() {
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const [pastHero, setPastHero] = useState(false);
+  // Whether the user has scrolled past the hero on the home page. Derived state —
+  // off-home routes simply don't subscribe (no scroll listener), and the floating
+  // logic below treats them as if the hero is always behind us.
+  const [scrolledPastHero, setScrolledPastHero] = useState(false);
 
   useEffect(() => {
-    if (!isHome) {
-      // Other routes: header is always in "past hero" mode (glass + theme color).
-      setPastHero(true);
-      return;
-    }
+    if (!isHome) return;
     const onScroll = () => {
       const threshold = Math.max(window.innerHeight * 0.85, 480);
-      setPastHero(window.scrollY > threshold);
+      setScrolledPastHero(window.scrollY > threshold);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -40,7 +39,7 @@ export function Header() {
   }, [isHome]);
 
   // Floating-white state only happens on the homepage above the hero.
-  const isFloatingWhite = isHome && !pastHero;
+  const isFloatingWhite = isHome && !scrolledPastHero;
 
   return (
     <header

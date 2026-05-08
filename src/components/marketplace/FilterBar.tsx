@@ -25,14 +25,19 @@ export type Filters = {
   sort: SortKey;
 };
 
+// Slider bounds and the no-filter default. Kept in lockstep on purpose — these
+// three values used to drift apart, which is what made the slider feel broken.
+export const BPM_MIN = 60;
+export const BPM_MAX = 200;
+
 export const DEFAULT_FILTERS: Filters = {
   query: "",
   productTypes: [],
   genres: [],
   moods: [],
   keys: [],
-  bpmMin: 0, // 0 lets sample kits (BPM=0) pass; tracks still match
-  bpmMax: 200,
+  bpmMin: BPM_MIN,
+  bpmMax: BPM_MAX,
   priceMin: 0,
   priceMax: 500,
   sort: "newest",
@@ -156,10 +161,16 @@ export function FilterBar({ filters, onChange, resultCount }: Props) {
           />
         </FilterGroup>
 
-        <FilterGroup label={`BPM · ${filters.bpmMin}–${filters.bpmMax}`}>
+        <FilterGroup
+          label={
+            filters.bpmMin === BPM_MIN && filters.bpmMax === BPM_MAX
+              ? "BPM · Any"
+              : `BPM · ${filters.bpmMin}–${filters.bpmMax}`
+          }
+        >
           <RangeRow
-            min={60}
-            max={180}
+            min={BPM_MIN}
+            max={BPM_MAX}
             valueMin={filters.bpmMin}
             valueMax={filters.bpmMax}
             onChange={(lo, hi) => onChange({ ...filters, bpmMin: lo, bpmMax: hi })}

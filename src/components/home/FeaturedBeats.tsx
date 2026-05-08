@@ -18,7 +18,7 @@ export function FeaturedBeats() {
               className="mt-3 max-w-md text-[15px]"
               style={{ color: "var(--fg-soft)" }}
             >
-              Three current favorites from the catalog. The full store has the rest.
+              Current rotation from the catalog. The full store has the rest.
             </p>
           </ScrollReveal>
           <ScrollReveal delay={0.1}>

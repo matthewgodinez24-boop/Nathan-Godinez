@@ -42,32 +42,57 @@ export default function AboutPage() {
           </div>
         </ScrollReveal>
 
-        {/* Photo / video placeholder grid */}
+        {/* Approach — three text-driven cards. Replace any of these with real */}
+        {/* photo blocks once Nathan has imagery; leaves the page polished today. */}
         <ScrollReveal delay={0.3}>
-          <div className="mt-16 grid grid-cols-2 gap-4 md:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className="aspect-square rounded-2xl border"
-                style={{
-                  borderColor: "var(--line)",
-                  background:
-                    "linear-gradient(135deg, var(--bg-soft), color-mix(in srgb, var(--color-accent) 8%, var(--bg-soft)))",
-                }}
-                aria-label="Placeholder photo — replace in /public/images/about/"
-              />
-            ))}
+          <div className="mt-16 grid gap-4 md:grid-cols-3">
+            <ApproachCard
+              eyebrow="Tone"
+              title="Tracked through analog."
+              body="Tube amps, real rooms, tape. The signal chain is part of the song — not a plug-in afterthought."
+            />
+            <ApproachCard
+              eyebrow="Craft"
+              title="Songs, not loops."
+              body="Verses, lifts, bridges, drops. Beats with structure so a vocal can live in them, not survive them."
+            />
+            <ApproachCard
+              eyebrow="Collaboration"
+              title="Open by default."
+              body="Every release ships with credits and transparent splits. Vocalists, producers, engineers — they're on the record."
+            />
           </div>
-          <p
-            className="mt-4 text-[12px]"
-            style={{ color: "var(--fg-mute)" }}
-          >
-            Placeholder grid — drop real photos and stills into <code>/public/images/about/</code>
-            and replace this block with an image grid.
-          </p>
         </ScrollReveal>
       </div>
     </article>
+  );
+}
+
+function ApproachCard({
+  eyebrow,
+  title,
+  body,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div
+      className="rounded-2xl border p-6"
+      style={{ borderColor: "var(--line)", background: "var(--bg-soft)" }}
+    >
+      <p
+        className="text-[11px] uppercase tracking-[0.2em]"
+        style={{ color: "var(--fg-mute)" }}
+      >
+        {eyebrow}
+      </p>
+      <h3 className="display mt-3 text-[20px]">{title}</h3>
+      <p className="mt-3 text-[14px] leading-relaxed" style={{ color: "var(--fg-soft)" }}>
+        {body}
+      </p>
+    </div>
   );
 }
 
