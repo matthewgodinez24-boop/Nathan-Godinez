@@ -192,7 +192,6 @@ export const beats: Beat[] = [
     durationSeconds: 192,
     description:
       "Wide, slow R&B with live guitar laid into tape. Built for vocalists who hold notes.",
-    featured: true,
   },
   {
     slug: "north-room",
@@ -215,7 +214,6 @@ export const beats: Beat[] = [
     durationSeconds: 168,
     description:
       "A hard hip-hop instrumental built off a single distorted guitar loop and a swung break.",
-    featured: true,
   },
   {
     slug: "evening-stretch",
@@ -239,7 +237,6 @@ export const beats: Beat[] = [
     durationSeconds: 204,
     description:
       "Nylon guitar over Rhodes. Late-evening soul that sits behind a vocal without crowding it.",
-    featured: true,
   },
   {
     slug: "lockstep",

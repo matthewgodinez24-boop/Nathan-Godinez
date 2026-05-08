@@ -1,37 +1,43 @@
 "use client";
 
-import { useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   motion,
   useScroll,
   useTransform,
+  useMotionValueEvent,
   useReducedMotion,
 } from "framer-motion";
 
 /**
- * HorizontalShowcase — a single, predictable scroll-jacked horizontal pan.
+ * One-shot horizontal showcase.
  *
- * Earlier versions tried to be clever: scroll-jack on the first pass, then swap
- * to a flat snap-scroll row, with a `window.scrollTo` correction to mask the
- * resulting layout shift. That swap was the source of every reported bug —
- * "teleports forward," "jumps mid-section," "feels jumpy on rescroll." Codex
- * flagged it as fragile during review. So we drop it.
+ * Behavior:
+ * - First entry on a session: render a tall scroll-jacked wrapper that pins the
+ *   panels and pans them horizontally as the user scrolls vertically. The user
+ *   is "forced" to swipe through once.
+ * - When the pan reaches its end, mark the section consumed and persist a flag
+ *   in `sessionStorage`. The wrapper collapses to a flat 100vh row.
+ * - Crucial: the moment we collapse, we capture the wrapper's old height and
+ *   inside a `useLayoutEffect` (synchronous, runs *before* the browser paints
+ *   the new layout) we call `window.scrollBy(0, -delta)`. The user's viewport
+ *   ends up showing the same DOM content it was showing a frame earlier — no
+ *   jump, no teleport, no reflow flash.
+ * - After consumption, scrolling up or down through the section is a normal
+ *   100vh block. No re-pinning, no re-trapping.
  *
- * One mode, every visit:
- * - The wrapper is `(N - 1) * 120 + 100` viewport-heights tall.
- * - A sticky inner container pins the panels to the screen for that span.
- * - Vertical scroll progress maps linearly to a horizontal translate on the
- *   panel track.
- * - Lenis (mounted in layout.tsx) lerps scroll velocity globally, so the
- *   transform reads from a continuous frame-perfect signal — no chunkiness.
- *
- * Trade-off: scrolling back up re-experiences the pan. With Lenis-smooth scroll
- * and a tighter wrapper height, that's a feature (it's brief, smooth, and the
- * content is short) rather than punishment. No swap means no layout shift, no
- * race conditions, no scrollTo, no edge cases.
- *
- * Reduced-motion users get a stacked vertical fallback — no jacking at all.
+ * Why sessionStorage (not just useState):
+ * - Without persistence, the consumed flag resets every time the homepage
+ *   remounts — e.g. user clicks Store, hits Back, returns to `/`. They'd be
+ *   re-trapped on every round trip. sessionStorage scopes the flag to the
+ *   browser tab, so the cinematic plays exactly once per session.
+ * - sessionStorage clears when the tab closes, so a genuine new visit (new
+ *   day, new tab) re-plays the cinematic — which is what the client wants.
+ * - localStorage would be wrong: it would dismiss the cinematic *forever*
+ *   across sessions, which isn't what was asked for.
  */
+
+const STORAGE_KEY = "showcase-consumed";
 
 type Panel = {
   eyebrow: string;
@@ -73,11 +79,77 @@ const panels: Panel[] = [
 
 export function HorizontalShowcase() {
   const reduced = useReducedMotion();
+  const [consumed, setConsumed] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // A ref-based guard for the consumed transition. State is async; this is sync.
+  // Without it, fast scroll bursts could fire `markConsumed` more than once
+  // before React commits, double-capturing heights and breaking the math.
+  const consumedRef = useRef(false);
+  // Wrapper's pixel height captured immediately before the consumed flip during
+  // user scroll. The next layout effect uses it to compute the exact compensation.
+  const heightBeforeRef = useRef<number | null>(null);
+
+  // Hydrate from sessionStorage on mount. useLayoutEffect runs synchronously
+  // before the first browser paint, so a returning visitor lands directly on
+  // the compact PassThroughRow with no flicker of the tall scroll-jack.
+  useLayoutEffect(() => {
+    try {
+      if (sessionStorage.getItem(STORAGE_KEY) === "1") {
+        consumedRef.current = true;
+        setConsumed(true);
+      }
+    } catch {
+      // sessionStorage may be blocked (private browsing, sandboxed iframes, etc.).
+      // Falling back to per-mount state is the right behavior — the user just
+      // experiences the cinematic on each fresh load, no error path.
+    }
+  }, []);
+
+  // Compensate scroll position when the wrapper height shrinks mid-page.
+  // Runs synchronously after DOM commit, before the browser paints the new
+  // layout — so the visible viewport stays exactly where it was.
+  useLayoutEffect(() => {
+    if (heightBeforeRef.current == null || !containerRef.current) return;
+    const before = heightBeforeRef.current;
+    const after = containerRef.current.offsetHeight;
+    heightBeforeRef.current = null;
+    const delta = before - after;
+    // `scrollBy` with a relative value (not `scrollTo` to an absolute target)
+    // means we're nudging by the exact amount the page reflowed under us. No
+    // assumptions about Lenis, scroll restoration, or where the user was.
+    if (delta > 0 && window.scrollY > 0) {
+      window.scrollBy(0, -delta);
+    }
+  }, [consumed]);
+
+  function markConsumed() {
+    if (consumedRef.current || !containerRef.current) return;
+    consumedRef.current = true;
+    heightBeforeRef.current = containerRef.current.offsetHeight;
+    setConsumed(true);
+    try {
+      sessionStorage.setItem(STORAGE_KEY, "1");
+    } catch {
+      // ignore — see hydration effect comment above.
+    }
+  }
+
   if (reduced) return <FallbackStack />;
-  return <ScrollJackedShowcase />;
+
+  return (
+    <div ref={containerRef}>
+      {consumed ? (
+        <PassThroughRow />
+      ) : (
+        <ScrollJackedShowcase onConsumed={markConsumed} />
+      )}
+    </div>
+  );
 }
 
-function ScrollJackedShowcase() {
+/* ---------------- Scroll-jacked first pass ---------------- */
+
+function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
   const wrapperRef = useRef<HTMLElement | null>(null);
   const { scrollYProgress } = useScroll({
     target: wrapperRef,
@@ -85,19 +157,24 @@ function ScrollJackedShowcase() {
   });
 
   const panelCount = panels.length;
-  // Each additional panel adds 120vh of vertical scroll (a generous travel that
-  // keeps the pan unhurried), plus 100vh for the resting first panel.
+  // Each additional panel adds 120vh of vertical scroll. Plus 100vh for the
+  // resting first panel. Lenis smooths scroll velocity globally so the pan
+  // reads from a continuous frame-perfect signal — no spring needed here.
   const wrapperVh = (panelCount - 1) * 120 + 100;
   const translatePct = -((panelCount - 1) * 100);
 
-  // Linear map. Lenis is doing all the smoothing upstream.
-  // The 0.05 / 0.95 padding keeps the first and last panels resting fully on
-  // screen at the section's edges.
   const x = useTransform(
     scrollYProgress,
     [0.05, 0.95],
     ["0%", `${translatePct}%`],
   );
+
+  // Fire `onConsumed` once the user has effectively reached the end of the pan.
+  // The `markConsumed` closure on the parent guards against re-entry via its
+  // own ref, so multiple updates here are safe.
+  useMotionValueEvent(scrollYProgress, "change", (v) => {
+    if (v >= 0.985) onConsumed();
+  });
 
   return (
     <section
@@ -110,8 +187,6 @@ function ScrollJackedShowcase() {
         <motion.div
           style={{
             x,
-            // GPU-composite hint — keeps the long horizontal track on its own
-            // layer so wide translates don't trigger full repaints.
             willChange: "transform",
             backfaceVisibility: "hidden",
           }}
@@ -144,6 +219,48 @@ function ScrollJackedShowcase() {
   );
 }
 
+/* ---------------- Pass-through row, after consumption ---------------- */
+
+function PassThroughRow() {
+  return (
+    <section
+      aria-label="What goes into a Nathan Godinez record"
+      className="relative isolate h-dvh overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(80% 60% at 50% 35%, #1a1614 0%, #0c0a09 60%, #060504 100%)",
+      }}
+    >
+      <div
+        className="flex h-full snap-x snap-mandatory items-center gap-6 overflow-x-auto px-[max(2.5rem,calc((100vw-1280px)/2+1.25rem))] pb-8"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {panels.map((p) => (
+          <article
+            key={p.title}
+            className="flex h-[78%] w-[min(86vw,640px)] shrink-0 snap-center flex-col justify-end overflow-hidden rounded-3xl p-10 text-white"
+            style={{ background: p.background }}
+          >
+            <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
+              {p.eyebrow}
+            </p>
+            <h3 className="display mt-3 text-[clamp(1.75rem,3.5vw,2.5rem)]">
+              {p.title}
+            </h3>
+            <p className="mt-3 max-w-md text-[14px] opacity-80">{p.body}</p>
+          </article>
+        ))}
+      </div>
+
+      <style>{`
+        section[aria-label="What goes into a Nathan Godinez record"] [class*="snap-x"]::-webkit-scrollbar { display: none; }
+      `}</style>
+    </section>
+  );
+}
+
+/* ---------------- Reduced-motion fallback ---------------- */
+
 function FallbackStack() {
   return (
     <section
@@ -169,6 +286,8 @@ function FallbackStack() {
     </section>
   );
 }
+
+/* ---------------- Sub-components ---------------- */
 
 function PanelSlide({
   panel,
