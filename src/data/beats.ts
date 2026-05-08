@@ -486,14 +486,14 @@ export const beats: Beat[] = [
   {
     slug: "vigo",
     title: "Vigo",
-    productType: "loop",
+    productType: "beat",
     bpm: 98,
     key: "F minor", // GUESS — confirm with Nathan
     genre: "Afrobeats",
     moods: ["Driving", "Lush"],
     tags: ["afro", "live percussion", "co-prod barragini"],
-    priceFrom: 29,
-    licenseOptions: STANDARD_LICENSES.slice(0, 2),
+    priceFrom: 49,
+    licenseOptions: STANDARD_LICENSES,
     splits: [
       { collaboratorId: "self", payoutPercent: 50 },
       { collaboratorId: "barragini", payoutPercent: 50 },
@@ -503,7 +503,7 @@ export const beats: Beat[] = [
     releasedAt: "2026-05-08",
     durationSeconds: 198, // GUESS — confirm
     description:
-      "Afrobeats loop at 98 BPM — warm guitar over live percussion. Drop it under a vocal hook or chop it into a verse. Co-produced with Barragini.",
+      "Afrobeats instrumental at 98 BPM — warm guitar over live percussion. Built for a vocal hook to ride. Co-produced with Barragini.",
   },
 ];
 
