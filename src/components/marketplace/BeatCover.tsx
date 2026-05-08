@@ -151,7 +151,7 @@ type Palette = {
    */
   accent?: string;
   /** Optional gradient stops for the base — used for "tropical" multi-stop fills. */
-  baseGradient?: { offset: string; color: string }[];
+  baseGradient?: ReadonlyArray<{ readonly offset: string; readonly color: string }>;
 };
 
 type CoverArt = {
