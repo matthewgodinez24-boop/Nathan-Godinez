@@ -1,80 +1,81 @@
 "use client";
 
-import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import {
   motion,
-  useScroll,
-  useTransform,
+  useMotionValue,
   useMotionValueEvent,
   useReducedMotion,
+  useScroll,
+  useTransform,
+  type MotionValue,
 } from "framer-motion";
 
 /**
- * One-shot horizontal showcase.
+ * Smooth one-shot horizontal showcase.
  *
- * Behavior the client asked for:
- * - First time the user enters this section, force them to right-swipe through
- *   the four panels via vertical scroll (the scroll-jacked, pinned mode).
- * - The moment they finish that swipe once, the section becomes a normal
- *   100vh block. Scrolling up and back down through it never re-traps them.
+ * Architecture (the standard scroll-linked pattern):
+ *   1. Tall outer wrapper (~5.5x the viewport).
+ *   2. A 100vh sticky child that pins to the screen for the wrapper's full
+ *      vertical span.
+ *   3. Inside the sticky child, a flex "track" of panels (each w-screen).
+ *   4. The vertical scroll progress through the wrapper (0..1) maps to the
+ *      track's translateX. The browser (with Lenis smoothing in our case)
+ *      drives the actual scroll; Framer Motion just maps the value to a
+ *      transform. No wheel interception, no per-frame React state, no
+ *      collapsing of the wrapper while the user is inside it.
  *
- * Implementation notes:
- * - The "consumed" flag lives in a *module-level* store, exposed to React via
- *   `useSyncExternalStore`. That's the lint-safe primitive for "external state
- *   that may differ between server and client" — it avoids the
- *   react-hooks/set-state-in-effect rule and gives a clean SSR/hydration story.
- * - The flag is also mirrored to `sessionStorage` so the experience plays
- *   exactly once per browser tab. localStorage would dismiss it forever; bare
- *   useState would re-trap on every navigation back to `/`.
- * - When the wrapper shrinks mid-scroll, we compensate scroll position via
- *   Lenis's own `scrollTo({ immediate: true })` (when Lenis is running).
- *   Falling back to `window.scrollTo` if Lenis is absent. Using Lenis's API
- *   means the smooth-scroll target and the actual scroll position update
- *   together — no fight, no oscillation.
+ * One-shot lock — the tricky part:
+ *   The earlier versions toggled the `x` style between a MotionValue and a
+ *   static string at completion. That re-binding is what felt choppy at the
+ *   transition. The fix here is a *ratcheted* MotionValue: scrollYProgress
+ *   feeds into a derived value that ONLY ever increases. Once the user has
+ *   reached a given progress, scrolling back up doesn't decrement it. The
+ *   panels never un-pan, and we never have to swap the source of `x`.
+ *
+ *   Side benefit: the same ratchet visually locks the panels at the final
+ *   frame after completion, without an explicit "completed" branch on the
+ *   render path. The pan is always one continuous motion value, top to
+ *   bottom, hydration to unmount.
+ *
+ * Persistence:
+ *   When `scrollYProgress` reaches the end the first time, we write
+ *   `showcase-consumed=1` to sessionStorage. On future mounts in the same
+ *   browser tab — back navigation, refresh — `useSyncExternalStore` reads
+ *   the flag and we render `PassThroughGrid` instead. Cinematic plays once.
+ *
+ *   sessionStorage was chosen deliberately: localStorage would dismiss the
+ *   cinematic forever; bare React state would re-trap users on every nav
+ *   roundtrip. sessionStorage = "once per browser tab" — exactly the spec.
  */
 
 const STORAGE_KEY = "showcase-consumed";
+const COMPLETION_THRESHOLD = 0.985;
 
-/* ---- module-level external store for the consumed flag ---- */
-
-let consumedRuntime = false;
-let consumedHydrated = false;
-const consumedSubscribers = new Set<() => void>();
-
-function readConsumed(): boolean {
-  // Lazily hydrate from sessionStorage on the first client read.
-  if (!consumedHydrated) {
-    consumedHydrated = true;
-    try {
-      consumedRuntime = sessionStorage.getItem(STORAGE_KEY) === "1";
-    } catch {
-      // sessionStorage may be blocked (private browsing, sandboxed iframes).
-      // The runtime override below still works for the lifetime of this tab.
-    }
+function getStoredConsumed() {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(STORAGE_KEY) === "1";
+  } catch {
+    return false;
   }
-  return consumedRuntime;
 }
 
-function markConsumedExternal(): void {
-  if (consumedRuntime) return;
-  consumedRuntime = true;
-  consumedHydrated = true;
+function subscribeToStorage(listener: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", listener);
+  return () => window.removeEventListener("storage", listener);
+}
+
+function storeConsumed() {
   try {
     sessionStorage.setItem(STORAGE_KEY, "1");
   } catch {
-    // ignore — runtime flag still gives correct behavior for this tab.
+    // sessionStorage may be blocked (private browsing, sandboxed iframes).
+    // The ratchet still locks the visual within this mount; only the
+    // cross-mount memory is lost in that case.
   }
-  consumedSubscribers.forEach((cb) => cb());
 }
-
-function subscribeConsumed(cb: () => void): () => void {
-  consumedSubscribers.add(cb);
-  return () => {
-    consumedSubscribers.delete(cb);
-  };
-}
-
-const getServerConsumedSnapshot = () => false;
 
 type Panel = {
   eyebrow: string;
@@ -85,28 +86,28 @@ type Panel = {
 
 const panels: Panel[] = [
   {
-    eyebrow: "01 — Tone",
+    eyebrow: "01 - Tone",
     title: "Tracked through analog.",
     body: "Every guitar passes through tube amps, tape saturation, and a real room before it ever hits the DAW.",
     background:
       "radial-gradient(60% 60% at 30% 30%, rgba(126,87,194,0.55), transparent 60%), linear-gradient(135deg, #100912, #2a1336 65%, #4a1d4a)",
   },
   {
-    eyebrow: "02 — Craft",
+    eyebrow: "02 - Craft",
     title: "Written like a song.",
-    body: "Beats, loops, and full instrumentals with structure. Verses, lifts, bridges — built so a vocal can live in them.",
+    body: "Beats, loops, and full instrumentals with structure. Verses, lifts, bridges - built so a vocal can live in them.",
     background:
       "radial-gradient(60% 60% at 70% 35%, rgba(255,154,0,0.4), transparent 60%), linear-gradient(135deg, #1a0e07, #3a1e0c 60%, #6b2f12)",
   },
   {
-    eyebrow: "03 — Collaboration",
+    eyebrow: "03 - Collaboration",
     title: "Built with other artists.",
     body: "Vocalists, co-producers, engineers, visual artists. Every release ships with credits and transparent splits.",
     background:
       "radial-gradient(60% 60% at 50% 30%, rgba(0,180,255,0.4), transparent 60%), linear-gradient(135deg, #051018, #0d2238 65%, #163c5a)",
   },
   {
-    eyebrow: "04 — Finish",
+    eyebrow: "04 - Finish",
     title: "Mixed for streaming.",
     body: "Loud where loud belongs, quiet where it counts. Masters checked across earbuds, monitors, and the car.",
     background:
@@ -116,100 +117,56 @@ const panels: Panel[] = [
 
 export function HorizontalShowcase() {
   const reduced = useReducedMotion();
-  // Subscribe to the module-level store. SSR returns false (no flicker); client
-  // first render reads sessionStorage. React handles the snapshot mismatch
-  // without a hydration warning — useSyncExternalStore is built for this.
   const consumed = useSyncExternalStore(
-    subscribeConsumed,
-    readConsumed,
-    getServerConsumedSnapshot,
+    subscribeToStorage,
+    getStoredConsumed,
+    () => false,
   );
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  // Captured at the moment the user finishes the pan, used by the layout
-  // effect below to compute the exact pixel compensation needed.
-  const heightBeforeRef = useRef<number | null>(null);
 
-  // After `consumed` flips true mid-scroll, the wrapper has shrunk from the
-  // tall scroll-jacked height (~4.6× viewport) down to 100vh. The browser
-  // auto-clamps window.scrollY whenever document height shrinks below the
-  // current scroll position — which happens before this layout effect runs.
-  // Reading window.scrollY here would give a *post-clamp* value that's already
-  // 3700-ish pixels smaller than where the user actually was; subtracting
-  // delta from that lands us at scrollY=0 (the previous teleport-to-top bug).
-  //
-  // Fix: compute the target position from the container's *known* layout
-  // (`offsetTop + after`). That is the bottom edge of the now-compressed
-  // showcase — i.e. the natural reading position for the start of the next
-  // section. No dependency on whatever scrollY ended up at after the clamp.
-  useLayoutEffect(() => {
-    if (heightBeforeRef.current == null || !containerRef.current) return;
-    const before = heightBeforeRef.current;
-    const after = containerRef.current.offsetHeight;
-    heightBeforeRef.current = null;
-    if (before <= after) return;
-
-    const target = containerRef.current.offsetTop + after;
-
-    const lenis = window.__lenis;
-    if (lenis) {
-      // Resize first so Lenis's cached scrollHeight matches the new layout —
-      // otherwise its next RAF tick can lerp toward a stale target.
-      lenis.resize();
-      lenis.scrollTo(target, { immediate: true, force: true });
-    } else {
-      window.scrollTo({ top: target, left: 0, behavior: "auto" });
-    }
-  }, [consumed]);
-
-  function handleConsumed() {
-    if (consumedRuntime || !containerRef.current) return;
-    // Capture height *before* the store update; the store update synchronously
-    // notifies subscribers, which schedules a re-render to PassThroughRow.
-    heightBeforeRef.current = containerRef.current.offsetHeight;
-    markConsumedExternal();
-  }
-
-  if (reduced) return <FallbackStack />;
-
-  return (
-    <div ref={containerRef}>
-      {consumed ? (
-        <PassThroughRow />
-      ) : (
-        <ScrollJackedShowcase onConsumed={handleConsumed} />
-      )}
-    </div>
-  );
+  if (reduced || consumed) return <PassThroughGrid />;
+  return <SmoothScrollShowcase onComplete={storeConsumed} />;
 }
 
-/* ---------------- Scroll-jacked first pass ---------------- */
-
-function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
+function SmoothScrollShowcase({ onComplete }: { onComplete: () => void }) {
   const wrapperRef = useRef<HTMLElement | null>(null);
+  const panelCount = panels.length;
+  // 150vh of vertical scroll runway per panel transition. More runway = each
+  // wheel/trackpad event produces a smaller horizontal step = smoother feel.
+  const wrapperVh = (panelCount - 1) * 150 + 100;
+  // Translate units in vw (explicit, GPU-friendly, no parent-width inference).
+  const translateMaxVw = (panelCount - 1) * -100;
+
   const { scrollYProgress } = useScroll({
     target: wrapperRef,
     offset: ["start start", "end end"],
   });
 
-  const panelCount = panels.length;
-  // Each additional panel adds 120vh of vertical scroll. Plus 100vh for the
-  // resting first panel. Lenis smooths scroll velocity globally so the pan
-  // reads from a continuous frame-perfect signal — no spring needed here.
-  const wrapperVh = (panelCount - 1) * 120 + 100;
-  const translatePct = -((panelCount - 1) * 100);
+  // Ratchet: a MotionValue that mirrors scrollYProgress on the way up but
+  // never decreases. Both the visual lock and the completion check key off
+  // this single value, so there's never a moment where the pan source changes.
+  const ratchet = useMotionValue(0);
+  const lastProgressRef = useRef(0);
+  const completionFiredRef = useRef(false);
 
-  const x = useTransform(
-    scrollYProgress,
-    [0.05, 0.95],
-    ["0%", `${translatePct}%`],
-  );
-
-  // Fire `onConsumed` once the user has effectively reached the end of the pan.
-  // The `markConsumed` closure on the parent guards against re-entry via its
-  // own ref, so multiple updates here are safe.
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
-    if (v >= 0.985) onConsumed();
+  useMotionValueEvent(scrollYProgress, "change", (value) => {
+    if (value > lastProgressRef.current) {
+      lastProgressRef.current = value;
+      ratchet.set(value);
+    }
+    if (!completionFiredRef.current && value >= COMPLETION_THRESHOLD) {
+      completionFiredRef.current = true;
+      onComplete();
+    }
   });
+
+  // Map ratcheted progress -> horizontal translate. The 0.05 / 0.95 padding
+  // gives the first and last panels a moment of "rest" at the edges of the
+  // sticky range — they sit fully on screen rather than half-arrived.
+  const x = useTransform(
+    ratchet,
+    [0.05, 0.95],
+    ["0vw", `${translateMaxVw}vw`],
+  );
 
   return (
     <section
@@ -222,13 +179,21 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
         <motion.div
           style={{
             x,
+            // Promote the panel track to its own GPU layer so the long
+            // horizontal translates don't trigger main-thread repaints.
             willChange: "transform",
+            translateZ: 0,
             backfaceVisibility: "hidden",
           }}
           className="flex h-full"
         >
-          {panels.map((p, i) => (
-            <PanelSlide key={p.title} panel={p} index={i} total={panelCount} />
+          {panels.map((panel, index) => (
+            <PanelSlide
+              key={panel.title}
+              panel={panel}
+              index={index}
+              total={panelCount}
+            />
           ))}
         </motion.div>
 
@@ -236,93 +201,65 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
           aria-hidden
           className="pointer-events-none absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-2"
         >
-          {panels.map((_, i) => (
+          {panels.map((_, index) => (
             <ProgressDot
-              key={i}
-              index={i}
+              key={index}
+              index={index}
               total={panelCount}
-              progress={scrollYProgress}
+              progress={ratchet}
             />
           ))}
         </div>
 
         <div className="pointer-events-none absolute right-8 top-8 text-[11px] uppercase tracking-[0.25em] text-white/60">
-          Scroll →
+          Scroll
         </div>
       </div>
     </section>
   );
 }
 
-/* ---------------- Pass-through row, after consumption ---------------- */
-
-function PassThroughRow() {
+function PassThroughGrid() {
   return (
     <section
       aria-label="What goes into a Nathan Godinez record"
-      className="relative isolate h-dvh overflow-hidden"
+      className="section"
       style={{
         background:
           "radial-gradient(80% 60% at 50% 35%, #1a1614 0%, #0c0a09 60%, #060504 100%)",
       }}
     >
-      <div
-        className="flex h-full snap-x snap-mandatory items-center gap-6 overflow-x-auto px-[max(2.5rem,calc((100vw-1280px)/2+1.25rem))] pb-8"
-        style={{ scrollbarWidth: "none" }}
-      >
-        {panels.map((p) => (
-          <article
-            key={p.title}
-            className="flex h-[78%] w-[min(86vw,640px)] shrink-0 snap-center flex-col justify-end overflow-hidden rounded-3xl p-10 text-white"
-            style={{ background: p.background }}
-          >
-            <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
-              {p.eyebrow}
-            </p>
-            <h3 className="display mt-3 text-[clamp(1.75rem,3.5vw,2.5rem)]">
-              {p.title}
-            </h3>
-            <p className="mt-3 max-w-md text-[14px] opacity-80">{p.body}</p>
-          </article>
-        ))}
-      </div>
+      <div className="container-x">
+        <div className="mb-10 max-w-2xl text-white">
+          <p className="text-[12px] uppercase tracking-[0.25em] text-white/55">
+            The process
+          </p>
+          <h2 className="display mt-3 text-[clamp(2rem,5vw,4rem)]">
+            What goes into a record.
+          </h2>
+        </div>
 
-      <style>{`
-        section[aria-label="What goes into a Nathan Godinez record"] [class*="snap-x"]::-webkit-scrollbar { display: none; }
-      `}</style>
-    </section>
-  );
-}
-
-/* ---------------- Reduced-motion fallback ---------------- */
-
-function FallbackStack() {
-  return (
-    <section
-      aria-label="What goes into a Nathan Godinez record"
-      className="section"
-      style={{ background: "var(--bg-soft)" }}
-    >
-      <div className="container-x grid gap-8">
-        {panels.map((p) => (
-          <article
-            key={p.title}
-            className="overflow-hidden rounded-3xl p-10 text-white"
-            style={{ background: p.background }}
-          >
-            <p className="text-[12px] uppercase tracking-[0.25em] opacity-75">
-              {p.eyebrow}
-            </p>
-            <h3 className="display mt-3 text-[clamp(1.75rem,4vw,3rem)]">{p.title}</h3>
-            <p className="mt-4 max-w-xl text-[15px] opacity-85">{p.body}</p>
-          </article>
-        ))}
+        <div className="grid gap-5 md:grid-cols-2">
+          {panels.map((panel) => (
+            <article
+              key={panel.title}
+              className="flex min-h-[260px] flex-col justify-end overflow-hidden rounded-3xl p-8 text-white"
+              style={{ background: panel.background }}
+            >
+              <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
+                {panel.eyebrow}
+              </p>
+              <h3 className="display mt-3 text-[clamp(1.65rem,3vw,2.35rem)]">
+                {panel.title}
+              </h3>
+              <p className="mt-3 max-w-md text-[14px] opacity-80">{panel.body}</p>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
 }
-
-/* ---------------- Sub-components ---------------- */
 
 function PanelSlide({
   panel,
@@ -373,12 +310,21 @@ function ProgressDot({
 }: {
   index: number;
   total: number;
-  progress: ReturnType<typeof useScroll>["scrollYProgress"];
+  progress: MotionValue<number>;
 }) {
   const start = (index - 0.4) / (total - 1);
   const end = (index + 0.4) / (total - 1);
-  const opacity = useTransform(progress, [start, end, end + 0.0001], [0.3, 1, 0.3]);
-  const scale = useTransform(progress, [start, end, end + 0.0001], [1, 1.4, 1]);
+  const opacity = useTransform(
+    progress,
+    [start, end, end + 0.0001],
+    [0.3, 1, 0.3],
+  );
+  const scale = useTransform(
+    progress,
+    [start, end, end + 0.0001],
+    [1, 1.4, 1],
+  );
+
   return (
     <motion.span
       style={{ opacity, scale }}
