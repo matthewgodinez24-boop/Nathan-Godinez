@@ -22,23 +22,6 @@ export const collaborators: Collaborator[] = [
     role: "Guitar / Production",
   },
   {
-    id: "vocalist-aria",
-    name: "Aria Vega",
-    role: "Vocals",
-    link: "https://instagram.com/",
-  },
-  {
-    id: "coprod-marek",
-    name: "Marek Holt",
-    role: "Co-production",
-    link: "https://instagram.com/",
-  },
-  {
-    id: "engineer-jules",
-    name: "Jules Park",
-    role: "Mix / Engineer",
-  },
-  {
     id: "barragini",
     name: "Barragini",
     role: "Co-production",

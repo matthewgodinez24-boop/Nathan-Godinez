@@ -6,9 +6,9 @@ import type { Beat } from "@/data/beats";
  * BeatCover — album-art-style placeholder.
  *
  * Real cover art at /public/images/beats/<slug>.jpg overrides the placeholder.
- * Each beat is hand-assigned a (silhouette + palette) pairing so the covers
- * feel art-directed instead of randomized. Only one beat (atlas-room) carries
- * the butterfly motif — the rest pull from a wider visual library.
+ * Each beat is hand-assigned a (silhouette + palette) pairing in COVER_ART
+ * below so the covers feel art-directed rather than randomized. Beats not in
+ * the map fall back to FALLBACK_ART.
  */
 
 export function BeatCover({ beat, className }: { beat: Beat; className?: string }) {
@@ -281,92 +281,9 @@ const PALETTE = {
   },
 } as const;
 
-// Manual assignments — each beat curated rather than hash-randomized.
-// Only ONE beat carries the butterfly. Edit this map to re-art-direct any beat.
+// Per-product cover art. Each entry is hand-curated to match the song's vibe;
+// no randomization. Add a row here when a new track lands in the catalog.
 const COVER_ART: Record<string, CoverArt> = {
-  // The lone butterfly — the Korven-style hero of the catalog
-  "atlas-room": {
-    silhouette: "butterfly",
-    palette: PALETTE.burningRed,
-    cornerMark: true,
-  },
-
-  // Beats
-  "north-room": {
-    silhouette: "flame",
-    palette: PALETTE.oxblood,
-    glowCy: "0.65",
-  },
-  "evening-stretch": {
-    silhouette: "rose",
-    palette: PALETTE.parchment,
-    cornerMark: true,
-  },
-  lockstep: {
-    silhouette: "lightning",
-    palette: PALETTE.midnight,
-    titleY: 72,
-  },
-  skyway: {
-    silhouette: "bird",
-    palette: PALETTE.cobalt,
-    glowCx: "0.5",
-    glowCy: "0.3",
-  },
-  "garden-tape": {
-    silhouette: "leaf",
-    palette: PALETTE.sage,
-    cornerMark: true,
-  },
-  "hallway-light": {
-    silhouette: "hand",
-    palette: PALETTE.amethyst,
-  },
-  "border-town": {
-    silhouette: "tree",
-    palette: PALETTE.rust,
-    glowCy: "0.7",
-  },
-
-  // Loops
-  "warm-room-loop-pack": {
-    silhouette: "vinyl",
-    palette: PALETTE.ember,
-  },
-  "drill-cuts-loop-pack": {
-    silhouette: "lightning",
-    palette: PALETTE.smoke,
-  },
-
-  // Songs
-  "long-hallways": {
-    silhouette: "smoke",
-    palette: PALETTE.magenta,
-    subjectBlur: 4,
-  },
-
-  // Scores
-  "first-light-cue": {
-    silhouette: "mountain",
-    palette: PALETTE.bone,
-    cornerMark: true,
-  },
-  "open-water-cue": {
-    silhouette: "wave",
-    palette: PALETTE.midnight,
-  },
-
-  // Kits
-  "studio-kit-vol-1": {
-    silhouette: "vinyl",
-    palette: PALETTE.forest,
-  },
-  "studio-kit-vol-2": {
-    silhouette: "eye",
-    palette: PALETTE.smoke,
-  },
-
-  // Real uploads from Nathan's Drive — client-directed art:
   // Leaf — solid black leaf silhouette on a purple gradient
   leaf: {
     silhouette: "leaf",
