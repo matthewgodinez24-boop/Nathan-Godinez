@@ -3,21 +3,20 @@
 import { useEffect } from "react";
 
 /**
- * Forces the homepage to land at the top — but only on a *fresh* visit, when
- * the cinematic showcase hasn't been consumed yet.
+ * Forces the homepage to land at the top on every mount.
  *
- * Why conditional:
- * - First visit: showcase will render in scroll-jacked mode (~4.6× viewport
- *   tall). If the browser restores a stale mid-page scrollY, the user lands
- *   inside the cinematic with no context. We want them at the hero, ready to
- *   scroll into the experience.
- * - Returning visitor (consumed flag set): showcase renders short, and
- *   navigation flows like back/forward should preserve the user's previous
- *   scroll position. Forcing them to top would break that. So we don't.
+ * Why:
+ * - The showcase below the hero is a tall scroll-jacked section. If the
+ *   browser restores a stale mid-page scrollY (cmd+R, back-forward), the
+ *   user lands inside the cinematic with no context. Forcing top → they
+ *   start at the hero, every time.
+ * - We also disable native `history.scrollRestoration` so back-forward
+ *   navigation doesn't override us.
  *
- * `history.scrollRestoration = "manual"` is set unconditionally so we always
- * own the policy — the conditional below is purely about whether to *also*
- * snap to the top.
+ * Trade-off: navigating /store → / lands at the top of the home page rather
+ * than wherever they last were. Acceptable because home, /store, /about, and
+ * /contact have different layouts — preserving scrollY across them isn't
+ * meaningful anyway.
  */
 export function ScrollToTopOnLoad() {
   useEffect(() => {
@@ -25,15 +24,7 @@ export function ScrollToTopOnLoad() {
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    let consumed = false;
-    try {
-      consumed = sessionStorage.getItem("showcase-consumed") === "1";
-    } catch {
-      // storage blocked → treat as fresh visit, force to top
-    }
-    if (!consumed) {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    }
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
   return null;
 }

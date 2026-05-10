@@ -1,49 +1,37 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import {
   motion,
-  useMotionValueEvent,
   useReducedMotion,
   useScroll,
   useTransform,
 } from "framer-motion";
 
 /**
- * One-shot horizontal showcase.
+ * HorizontalShowcase — single-mode scroll-linked horizontal pan.
  *
- * Behavior split into three render branches:
- * - prefers-reduced-motion → <FallbackStack> (vertical accessible stack).
- * - First entry per browser tab → <ScrollJackedShowcase> (sticky pin + horizontal pan
- *   driven by vertical scroll progress).
- * - After consumption → <PassThroughRow> (a normal 100vh block with the same
- *   panels arranged in a horizontal-snap strip the user can revisit at will).
+ * Design: the section is a tall wrapper (~5x viewport) with a sticky 100vh
+ * inner container. Vertical scroll progress through the wrapper (0..1) maps
+ * to the panel track's translateX. Lenis (mounted in layout.tsx) smooths the
+ * scroll input so the pan reads from a continuous, frame-perfect signal.
  *
- * Consumption is persisted under STORAGE_KEY in sessionStorage, scoped per tab.
+ * No "consumed" flag, no sessionStorage, no layout swap. Every time the user
+ * scrolls into the section, the pan plays. This is how Apple's iPhone product
+ * pages, Vercel's marketing pages, and Linear's landing handle scroll-linked
+ * horizontal sections — they don't try to disable themselves on revisit.
  *
- * Anti-teleport (the bug we're fixing):
- *   The earlier compensation was *relative*: capture wrapper height before the
- *   flip, subtract `wrapper.offsetHeight` after, scrollBy the delta. That drifts
- *   because the consume threshold doesn't fire at exactly the same scroll
- *   position every time — Framer Motion's `change` events fire at slightly
- *   different progress values depending on velocity.
+ * Earlier iterations of this file tried to swap to a flat "PassThroughRow"
+ * after one pan, then compensate the resulting layout shift with a manual
+ * window.scrollTo. Every variation of that approach drifted in some edge case
+ * (consumption fires at slightly different scroll progress depending on
+ * velocity; document height changes auto-clamp scrollY before our compensation
+ * runs; Lenis lerps back to a stale target). Dropping the swap eliminates the
+ * whole class of bugs.
  *
- *   Fix: anchor the post-flip scroll to an *absolute* Y, captured BEFORE the
- *   flip via `getBoundingClientRect().top + window.scrollY`. After commit, we
- *   scroll the window to that exact Y so the now-100vh section sits flush at
- *   the top of the viewport, regardless of where the threshold triggered.
+ * `prefers-reduced-motion` users still get a stacked vertical fallback — no
+ * scroll-jacking, no Lenis interaction.
  */
-
-const STORAGE_KEY = "showcase-consumed";
-
-function readStoredConsumed(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return sessionStorage.getItem(STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
 
 type Panel = {
   eyebrow: string;
@@ -85,72 +73,16 @@ const panels: Panel[] = [
 
 export function HorizontalShowcase() {
   const reduced = useReducedMotion();
-  // Lazy initializer reads sessionStorage on first client render. SSR returns
-  // false (no window). On returning visits in the same tab, the component
-  // hydrates straight to the PassThroughRow branch.
-  const [consumed, setConsumed] = useState<boolean>(() => readStoredConsumed());
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  // Sync guard. State is async; this is sync. Without it, fast scroll bursts
-  // could fire `markConsumed` more than once before React commits.
-  const consumedRef = useRef<boolean>(consumed);
-  // Absolute Y of the section's top, captured BEFORE the height flip. After
-  // commit, we scroll to this exact value so the now-100vh section sits flush
-  // at the top of the viewport — independent of where the threshold fired.
-  const sectionTopRef = useRef<number | null>(null);
-
-  useLayoutEffect(() => {
-    if (sectionTopRef.current == null) return;
-    const target = sectionTopRef.current;
-    sectionTopRef.current = null;
-    // Prefer Lenis if it's running globally — using its `scrollTo` with
-    // `immediate: true, force: true` updates Lenis's internal target AND the
-    // actual scroll position together. Without that, Lenis's next RAF tick
-    // can lerp back toward a stale (pre-flip) target and drag the user away
-    // from the anchor we just set.
-    const lenis = window.__lenis;
-    if (lenis) {
-      lenis.scrollTo(target, { immediate: true, force: true });
-    } else {
-      window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior });
-    }
-  }, [consumed]);
-
-  function markConsumed() {
-    if (consumedRef.current || !containerRef.current) return;
-    consumedRef.current = true;
-    // Capture the section's absolute Y BEFORE the height flip. The wrapper is
-    // about to shrink by ~360vh; we'll scroll the user to this exact Y after
-    // commit so the new 100vh section sits flush at the top of the viewport.
-    const rect = containerRef.current.getBoundingClientRect();
-    sectionTopRef.current = rect.top + window.scrollY;
-    setConsumed(true);
-    try {
-      sessionStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      // sessionStorage may be blocked (private browsing, sandboxed iframes).
-      // The runtime ref still locks the visual within this mount; only the
-      // cross-mount memory is lost.
-    }
-  }
-
   if (reduced) return <FallbackStack />;
-
-  return (
-    <div ref={containerRef} suppressHydrationWarning>
-      {consumed ? (
-        <PassThroughRow />
-      ) : (
-        <ScrollJackedShowcase onConsumed={markConsumed} />
-      )}
-    </div>
-  );
+  return <ScrollJackedShowcase />;
 }
 
-/* ---------------- Scroll-jacked first pass ---------------- */
-
-function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
+function ScrollJackedShowcase() {
   const wrapperRef = useRef<HTMLElement | null>(null);
   const panelCount = panels.length;
+  // 120vh of vertical scroll runway per panel transition + 100vh resting
+  // height = 460vh total wrapper for 4 panels. Generous enough that each
+  // wheel/trackpad event produces a small horizontal step.
   const wrapperVh = (panelCount - 1) * 120 + 100;
   const translatePct = -((panelCount - 1) * 100);
 
@@ -159,18 +91,14 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
     offset: ["start start", "end end"],
   });
 
+  // Linear map. Lenis is doing all the smoothing upstream.
+  // The 0.05 / 0.95 padding leaves the first and last panels resting fully on
+  // screen at the section's edges.
   const x = useTransform(
     scrollYProgress,
     [0.05, 0.95],
     ["0%", `${translatePct}%`],
   );
-
-  // Tighter threshold (0.999 instead of 0.985) so consumption fires at a
-  // deterministic point near the very end of the pan. The `consumedRef` guard
-  // inside `markConsumed` prevents re-entry, so a high threshold is safe.
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
-    if (v >= 0.999) onConsumed();
-  });
 
   return (
     <section
@@ -226,48 +154,6 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
   );
 }
 
-/* ---------------- Pass-through row, after consumption ---------------- */
-
-function PassThroughRow() {
-  return (
-    <section
-      aria-label="What goes into a Nathan Godinez record"
-      className="relative isolate h-dvh overflow-hidden"
-      style={{
-        background:
-          "radial-gradient(80% 60% at 50% 35%, #1a1614 0%, #0c0a09 60%, #060504 100%)",
-      }}
-    >
-      <div
-        className="flex h-full snap-x snap-mandatory items-center gap-6 overflow-x-auto px-[max(2.5rem,calc((100vw-1280px)/2+1.25rem))] pb-8"
-        style={{ scrollbarWidth: "none" }}
-      >
-        {panels.map((panel) => (
-          <article
-            key={panel.title}
-            className="flex h-[78%] w-[min(86vw,640px)] shrink-0 snap-center flex-col justify-end overflow-hidden rounded-3xl p-10 text-white"
-            style={{ background: panel.background }}
-          >
-            <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
-              {panel.eyebrow}
-            </p>
-            <h3 className="display mt-3 text-[clamp(1.75rem,3.5vw,2.5rem)]">
-              {panel.title}
-            </h3>
-            <p className="mt-3 max-w-md text-[14px] opacity-80">{panel.body}</p>
-          </article>
-        ))}
-      </div>
-
-      <style>{`
-        section[aria-label="What goes into a Nathan Godinez record"] [class*="snap-x"]::-webkit-scrollbar { display: none; }
-      `}</style>
-    </section>
-  );
-}
-
-/* ---------------- Reduced-motion fallback ---------------- */
-
 function FallbackStack() {
   return (
     <section
@@ -295,8 +181,6 @@ function FallbackStack() {
     </section>
   );
 }
-
-/* ---------------- Sub-components ---------------- */
 
 function PanelSlide({
   panel,
