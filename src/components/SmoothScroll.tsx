@@ -30,9 +30,12 @@ export function SmoothScroll() {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const lenis = new Lenis({
-      duration: 1.05,
+      // Lenis defaults for lerp/duration. Lower values feel "floaty" on
+      // scroll-jacked sections — at lerp 0.085 the scroll-linked horizontal
+      // pan visibly lags the input. Defaults give a tight enough response.
+      duration: 1.2,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      lerp: 0.085,
+      lerp: 0.1,
       wheelMultiplier: 1.05,
       touchMultiplier: 1.6,
       smoothWheel: true,
