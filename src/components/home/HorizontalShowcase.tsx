@@ -130,27 +130,34 @@ export function HorizontalShowcase() {
   const heightBeforeRef = useRef<number | null>(null);
 
   // After `consumed` flips true mid-scroll, the wrapper has shrunk from the
-  // tall scroll-jacked height to 100vh. Compensate scroll position so the
-  // visible viewport stays exactly where it was. useLayoutEffect runs after
-  // DOM commit but before the browser paints, so there's no flash.
+  // tall scroll-jacked height (~4.6× viewport) down to 100vh. The browser
+  // auto-clamps window.scrollY whenever document height shrinks below the
+  // current scroll position — which happens before this layout effect runs.
+  // Reading window.scrollY here would give a *post-clamp* value that's already
+  // 3700-ish pixels smaller than where the user actually was; subtracting
+  // delta from that lands us at scrollY=0 (the previous teleport-to-top bug).
+  //
+  // Fix: compute the target position from the container's *known* layout
+  // (`offsetTop + after`). That is the bottom edge of the now-compressed
+  // showcase — i.e. the natural reading position for the start of the next
+  // section. No dependency on whatever scrollY ended up at after the clamp.
   useLayoutEffect(() => {
     if (heightBeforeRef.current == null || !containerRef.current) return;
     const before = heightBeforeRef.current;
     const after = containerRef.current.offsetHeight;
     heightBeforeRef.current = null;
-    const delta = before - after;
-    if (delta <= 0 || window.scrollY <= 0) return;
+    if (before <= after) return;
 
-    const newY = Math.max(0, window.scrollY - delta);
-    // Prefer Lenis if it's running globally — its smooth-scroll target diverges
-    // from `window.scrollY` otherwise, and a raw `window.scrollBy` can be
-    // overwritten by Lenis's next RAF tick. `scrollTo({ immediate, force })`
-    // updates Lenis's target and the actual scroll position in lockstep.
+    const target = containerRef.current.offsetTop + after;
+
     const lenis = window.__lenis;
     if (lenis) {
-      lenis.scrollTo(newY, { immediate: true, force: true });
+      // Resize first so Lenis's cached scrollHeight matches the new layout —
+      // otherwise its next RAF tick can lerp toward a stale target.
+      lenis.resize();
+      lenis.scrollTo(target, { immediate: true, force: true });
     } else {
-      window.scrollTo({ top: newY, left: 0, behavior: "auto" });
+      window.scrollTo({ top: target, left: 0, behavior: "auto" });
     }
   }, [consumed]);
 
