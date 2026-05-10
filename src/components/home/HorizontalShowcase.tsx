@@ -7,28 +7,23 @@ import { useEffect, useRef, useState } from "react";
  * Highlights — Apple-style full-bleed carousel.
  *
  * Architecture: a single `track` <div> containing all cards side-by-side at
- * 100vw each. The track is positioned via `transform: translate3d(...)` and
- * driven by a `--active` CSS variable. Every transition — auto-advance,
- * pagination dot click, and the snap after a drag — uses the SAME CSS
- * transition (700ms, custom Apple-flavored cubic-bezier). That's what gives
- * the consistent, predictable feel the previous native-scroll version
- * couldn't deliver.
+ * 100vw each. The track is positioned via `transform: translate3d(...)`.
+ * Every transition — auto-advance, pagination dot click, drag-snap, wheel-
+ * swipe — uses the SAME CSS transition (700ms, custom Apple cubic-bezier).
+ * That's what gives the consistent, predictable feel.
  *
- * Why not native scroll-snap:
- *   - `scrollTo({ behavior: "smooth" })` has implementation-defined timing
- *     (different on Chrome vs. Safari vs. mobile). Inconsistent feel.
- *   - `snap-mandatory` competes with smooth scroll mid-flight, producing the
- *     "chunky" jitter that prompted this rewrite.
- *   - Lenis was eating wheel events globally — even `data-lenis-prevent`
- *     wasn't enough because trackpad horizontal-swipe goes through wheel.
+ * Three input methods, all converging on the same transition:
+ *   1. Pointer drag       → onPointerDown/Move/Up. Card follows finger 1:1
+ *                           during drag, snaps to next/prev on release if
+ *                           dragged past 18% of viewport.
+ *   2. Wheel (trackpad horizontal swipe) → non-passive wheel listener.
+ *                           Captures only when deltaX dominates deltaY.
+ *                           Single gesture advances one card max.
+ *   3. Dot click / autoplay tick / play toggle → just updates `activeIndex`,
+ *                           the same transition runs.
  *
- * What this gives us instead:
- *   - GPU-composited transform on the track; one transition per slide change.
- *   - Identical timing for autoplay, dot click, and drag-snap. Every advance
- *     "feels the same."
- *   - Drag/swipe support via pointer events with elastic-free snap on release.
- *   - Vertical page scroll passes through naturally — `touch-action: pan-y`
- *     on the track lets the OS handle vertical gestures.
+ * Lenis is told to skip this section via `data-lenis-prevent` so it doesn't
+ * eat the wheel events.
  */
 
 type Highlight = {
@@ -89,25 +84,24 @@ const highlights: Highlight[] = [
 ];
 
 const AUTO_ADVANCE_MS = 6000;
-// Apple-flavored easing — slower start, quick middle, gentle settle.
 const TRANSITION = "transform 700ms cubic-bezier(0.5, 0, 0.1, 1)";
-// How far the user has to drag (as a fraction of viewport width) for the
-// release to advance to the next/prev card. Below this threshold, snap back.
 const DRAG_THRESHOLD = 0.18;
+// Accumulated wheel deltaX (px) needed to trigger one card advance.
+const WHEEL_THRESHOLD = 50;
+// After this much idle time, the wheel gesture is considered over and the
+// accumulator + per-gesture lock both reset.
+const WHEEL_GESTURE_END_MS = 200;
 
 type DragState = { startX: number; offset: number; pointerId: number };
 
 export function HorizontalShowcase() {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const isDragging = drag !== null;
 
-  /**
-   * Auto-advance loop. Pauses while the user is mid-drag (otherwise the
-   * track would jump under their finger). Stays running across releases —
-   * if the user drags to slide 2, the next tick advances to 3 from there.
-   */
+  /* ---- auto-advance ---- */
   useEffect(() => {
     if (!isPlaying || isDragging) return;
     const interval = setInterval(() => {
@@ -115,6 +109,63 @@ export function HorizontalShowcase() {
     }, AUTO_ADVANCE_MS);
     return () => clearInterval(interval);
   }, [isPlaying, isDragging]);
+
+  /* ---- wheel: trackpad horizontal swipe ---- */
+  // React's onWheel adds passive listeners which can't preventDefault; we need
+  // a native non-passive listener so we can stop the page from scrolling
+  // sideways or vertically when the gesture is clearly horizontal.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    let accum = 0;
+    let gestureLocked = false;
+    let endTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleEnd = () => {
+      if (endTimer) clearTimeout(endTimer);
+      endTimer = setTimeout(() => {
+        accum = 0;
+        gestureLocked = false;
+        endTimer = null;
+      }, WHEEL_GESTURE_END_MS);
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      // Only handle clearly horizontal intent — otherwise let the page scroll
+      // vertically as normal. Threshold prevents tiny diagonal noise from
+      // hijacking vertical scrolls.
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+
+      e.preventDefault();
+
+      if (gestureLocked) {
+        // Already advanced for this gesture — eat remaining events until the
+        // gesture ends, but reset the timer so we don't release prematurely.
+        scheduleEnd();
+        return;
+      }
+
+      accum += e.deltaX;
+      scheduleEnd();
+
+      if (accum >= WHEEL_THRESHOLD) {
+        setActiveIndex((i) => Math.min(i + 1, highlights.length - 1));
+        gestureLocked = true;
+        accum = 0;
+      } else if (accum <= -WHEEL_THRESHOLD) {
+        setActiveIndex((i) => Math.max(i - 1, 0));
+        gestureLocked = true;
+        accum = 0;
+      }
+    };
+
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", onWheel);
+      if (endTimer) clearTimeout(endTimer);
+    };
+  }, []);
 
   function jumpTo(index: number) {
     setActiveIndex(index);
@@ -124,14 +175,11 @@ export function HorizontalShowcase() {
     setIsPlaying((p) => !p);
   }
 
-  /* ---- pointer-driven drag-to-swipe ---- */
+  /* ---- pointer drag ---- */
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    // Only respond to primary mouse button or touch/pen.
     if (e.pointerType === "mouse" && e.button !== 0) return;
     setDrag({ startX: e.clientX, offset: 0, pointerId: e.pointerId });
-    // Capture so subsequent move/up events come to this element even if the
-    // pointer leaves it. Critical for fast flicks.
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -157,10 +205,6 @@ export function HorizontalShowcase() {
 
   /* ---- transform composition ---- */
 
-  // Base offset: -activeIndex * 100vw (each card is one viewport wide).
-  // Drag offset (px): added to the base so the track follows the finger.
-  // No transition during drag → finger-tight tracking. Transition snaps in
-  // on release / state change.
   const trackStyle: React.CSSProperties = {
     transform: `translate3d(calc(${-activeIndex} * 100vw + ${
       drag?.offset ?? 0
@@ -168,45 +212,28 @@ export function HorizontalShowcase() {
     transition: isDragging ? "none" : TRANSITION,
     willChange: "transform",
     backfaceVisibility: "hidden",
-    // Allow vertical page scroll to pass through; capture horizontal gestures
-    // for our pointer handler.
     touchAction: "pan-y",
     userSelect: isDragging ? "none" : undefined,
   };
 
   return (
-    <section className="py-24 md:py-32" aria-label="Catalog highlights">
+    <section className="py-20 md:py-28" aria-label="Catalog highlights">
       <div className="container-x">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p
-              className="text-[12px] uppercase tracking-[0.25em]"
-              style={{ color: "var(--fg-mute)" }}
-            >
-              The catalog
-            </p>
-            <h2 className="display mt-3 max-w-3xl text-[clamp(2rem,5vw,3.5rem)]">
-              Get the highlights.
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <PaginationDots
-              count={highlights.length}
-              active={activeIndex}
-              onPick={jumpTo}
-            />
-            <PlayPauseButton isPlaying={isPlaying} onToggle={togglePlay} />
-          </div>
-        </div>
+        <p
+          className="text-[12px] uppercase tracking-[0.25em]"
+          style={{ color: "var(--fg-mute)" }}
+        >
+          The catalog
+        </p>
+        <h2 className="display mt-3 max-w-3xl text-[clamp(2rem,5vw,3.5rem)]">
+          Get the highlights.
+        </h2>
       </div>
 
-      {/* Viewport — one card visible at a time */}
+      {/* Viewport — captures wheel events, hosts the translating track */}
       <div
+        ref={viewportRef}
         className="mt-10 overflow-hidden"
-        // data-lenis-prevent here too as a defensive measure; the transform
-        // approach doesn't depend on native scroll, but if a future change
-        // ever introduces an inner scroller, this keeps Lenis off it.
         data-lenis-prevent
       >
         <div
@@ -220,14 +247,22 @@ export function HorizontalShowcase() {
           {highlights.map((h) => (
             <div
               key={h.category}
-              className="w-screen shrink-0 px-4 sm:px-8 md:px-12"
-              // The wrapper provides side padding so the card isn't flush to
-              // the viewport edge. The card itself fills the remaining space.
+              className="w-screen shrink-0 px-3 sm:px-5 md:px-6"
             >
               <HighlightCard highlight={h} />
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Controls — bottom-center under the carousel, the way Apple does it */}
+      <div className="container-x mt-8 flex items-center justify-center gap-4">
+        <PaginationDots
+          count={highlights.length}
+          active={activeIndex}
+          onPick={jumpTo}
+        />
+        <PlayPauseButton isPlaying={isPlaying} onToggle={togglePlay} />
       </div>
     </section>
   );
@@ -240,13 +275,10 @@ function HighlightCard({ highlight }: { highlight: Highlight }) {
     <Link
       href={highlight.href}
       aria-label={`${highlight.category}: ${highlight.title}`}
-      // Card fills the viewport-padded slot. Tall enough to feel cinematic
-      // without forcing the user to scroll past a wall.
-      className="group relative flex h-[clamp(440px,60vh,560px)] w-full flex-col justify-between overflow-hidden rounded-[28px] p-8 text-white md:p-12"
+      // Tall, near-full-screen ratio. clamp(560px, 82vh, 820px) keeps the
+      // card cinematic on desktop without breaking small phones.
+      className="group relative flex h-[clamp(560px,82vh,820px)] w-full flex-col justify-between overflow-hidden rounded-[28px] p-8 text-white md:p-14"
       style={{ background: highlight.background }}
-      // The card is a Link — it shouldn't fight the parent's pointer-drag.
-      // `draggable={false}` prevents the browser's native image-drag from
-      // initiating during a swipe.
       draggable={false}
       onDragStart={(e) => e.preventDefault()}
     >
@@ -266,13 +298,13 @@ function HighlightCard({ highlight }: { highlight: Highlight }) {
       </div>
 
       <div className="relative z-10">
-        <h3 className="display text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
+        <h3 className="display text-[clamp(2.25rem,5vw,3.75rem)] leading-[1.05]">
           {highlight.title}
         </h3>
-        <p className="mt-4 max-w-md text-[clamp(0.95rem,1.2vw,1.05rem)] leading-relaxed opacity-85">
+        <p className="mt-5 max-w-xl text-[clamp(1rem,1.4vw,1.2rem)] leading-relaxed opacity-85">
           {highlight.body}
         </p>
-        <span className="mt-6 inline-flex items-center gap-2 text-[14px] font-medium opacity-90 transition-opacity group-hover:opacity-100">
+        <span className="mt-7 inline-flex items-center gap-2 text-[15px] font-medium opacity-90 transition-opacity group-hover:opacity-100">
           {highlight.ctaLabel}
           <span aria-hidden className="transition-transform group-hover:translate-x-1">
             →
@@ -307,7 +339,7 @@ function PaginationDots({
             aria-current={isActive ? "true" : undefined}
             className="h-1.5 rounded-full transition-all duration-300"
             style={{
-              width: isActive ? "24px" : "6px",
+              width: isActive ? "26px" : "6px",
               background: isActive ? "var(--fg)" : "var(--fg-mute)",
               opacity: isActive ? 1 : 0.4,
             }}
