@@ -1,59 +1,43 @@
 "use client";
 
-import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import {
   motion,
+  useMotionValue,
   useMotionValueEvent,
   useReducedMotion,
   useScroll,
   useTransform,
+  type MotionValue,
 } from "framer-motion";
 
 /**
- * Two-mode horizontal showcase, swap-based, per browser tab.
+ * Horizontal showcase — three render branches, no mid-mount layout shifts.
  *
- *   First visit (consumed === false):
- *     <ScrollJackedShowcase /> — tall wrapper (~460vh), sticky 100vh inner,
- *     panels translate horizontally as the user scrolls vertically. The user
- *     is "forced" to ride the cinematic once.
+ *   prefers-reduced-motion (any state) → <FallbackStack />
+ *     Vertical accessible stack. Untouched.
  *
- *   After consumption (consumed === true):
- *     <PassThroughRow /> — 100vh, horizontal-snap row of the same panels.
- *     Vertical scroll passes through normally; revisiting requires horizontal
- *     scroll inside the row.
+ *   First visit per browser tab (consumed === false) → <ScrollJackedShowcase />
+ *     Tall wrapper (~460vh), sticky 100vh inner, panels translate horizontally
+ *     as the user scrolls vertically. Lenis (mounted globally) smooths input.
+ *     When the user reaches the end ONCE, sessionStorage flag is written and
+ *     the panel track *locks* on panel 4. The wrapper does NOT collapse and
+ *     we do NOT call window.scrollTo or lenis.scrollTo — the section stays
+ *     mounted at its full height for the rest of this page view. Scrolling
+ *     back up does not replay the swipe animation; panel 4 stays put.
  *
- *   prefers-reduced-motion (any state):
- *     <FallbackStack /> — vertical stack. Untouched. Scroll-snap rows are
- *     also motion; reduced-motion users get the most conservative layout.
+ *   Future visit in same tab (consumed === true on mount) → <CompactGrid />
+ *     A normal vertical grid of the same content. No scroll-jack, no sticky,
+ *     no Lenis interaction. The decision happens at mount time, so there's
+ *     no mid-page swap to coordinate.
  *
- * The teleport-on-swap problem and how this version avoids it:
- *
- *   When the wrapper shrinks from ~460vh to 100vh, document height drops by
- *   ~3700px. The browser auto-clamps window.scrollY before any of our React
- *   code runs, AND Lenis's RAF loop can lerp toward a stale pre-swap target
- *   on the next tick. Both effects combined moved the user unpredictably
- *   (sometimes far below, sometimes back to the top).
- *
- *   Fix:
- *     1. Capture target Y from LAYOUT-INVARIANT values, computed BEFORE the
- *        React state flip:
- *          sectionTop  = rect.top + window.scrollY
- *          targetY     = sectionTop + window.innerHeight   // bottom of new 100vh section
- *        Hero's height above the section never changes, so sectionTop is
- *        stable across the swap. We never read window.scrollY after the
- *        commit (where it's already been clamped).
- *
- *     2. Freeze Lenis before flipping state via lenis.stop(). This prevents
- *        any RAF tick during the swap from overriding our scroll target.
- *
- *     3. After commit, in useLayoutEffect:
- *          - window.scrollTo({ behavior: "instant" })  // direct browser scroll
- *          - lenis.resize()                             // refresh scrollHeight cache
- *          - lenis.scrollTo(target, { immediate, force }) // overwrite Lenis target
- *          - lenis.start()                              // resume RAF loop
- *
- *   This gives both the browser and Lenis a synchronous absolute anchor at a
- *   point that was computed from the unshrunken layout, no relative math.
+ * The previous architectures swapped the wrapper from ~460vh to 100vh while
+ * the user was inside it, then tried to compensate scroll with window.scrollTo
+ * and lenis.scrollTo. Every variant of that had failure modes (browser
+ * auto-clamping scrollY before our compensation ran, Lenis lerping toward
+ * a stale target, etc.). This version eliminates the swap entirely; the
+ * "locked panel 4" state is implemented at the data layer via a ratcheted
+ * MotionValue, not at the layout layer.
  */
 
 /* ---- module-level external store for the consumed flag ---- */
@@ -141,85 +125,26 @@ const panels: Panel[] = [
 /* ---- root: route between three modes ---- */
 
 export function HorizontalShowcase() {
+  // Both hooks always called — no conditional hooks. Branching happens after.
   const reduced = useReducedMotion();
-  // Reduced-motion users get the vertical stack, full stop. Scroll-snap rows
-  // are also motion; this is the most accessibility-correct option and it's
-  // already working — we don't trade it for fancier behavior.
-  if (reduced) return <FallbackStack />;
-  return <ConsumableShowcase />;
-}
-
-/* ---- consumable: handles the swap + scroll anchor ---- */
-
-function ConsumableShowcase() {
   const consumed = useSyncExternalStore(
     subscribeConsumed,
     readConsumed,
     getServerConsumedSnapshot,
   );
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  // Pre-computed absolute Y where the user should land after the swap.
-  // Captured in `handleConsumed`, applied in `useLayoutEffect` post-commit.
-  const targetYRef = useRef<number | null>(null);
 
-  useLayoutEffect(() => {
-    const target = targetYRef.current;
-    if (target == null) return;
-    targetYRef.current = null;
-
-    // Belt: command the browser to scroll directly, instantly.
-    window.scrollTo({
-      top: target,
-      left: 0,
-      behavior: "instant" as ScrollBehavior,
-    });
-
-    // Suspenders: sync Lenis. The document just shrunk by ~360vh, so Lenis's
-    // cached scrollHeight is stale; resize() refreshes it. scrollTo with
-    // immediate+force overwrites Lenis's internal target so its next RAF
-    // tick doesn't lerp away from where we just put the user. start() resumes
-    // the RAF loop after the freeze in handleConsumed.
-    const lenis = window.__lenis;
-    if (lenis) {
-      lenis.resize();
-      lenis.scrollTo(target, { immediate: true, force: true });
-      lenis.start();
-    }
-  }, [consumed]);
-
-  function handleConsumed() {
-    if (consumedRuntime || !containerRef.current) return;
-
-    // Compute the post-swap anchor from layout-INVARIANT numbers. Hero's
-    // height above doesn't change between modes, so this Y is stable.
-    const rect = containerRef.current.getBoundingClientRect();
-    const sectionTop = rect.top + window.scrollY;
-    // Land the user AT the top of the (now 100vh) snap row — they should see
-    // the row they just unlocked, not be flung past it into Featured Music.
-    targetYRef.current = sectionTop;
-
-    // Freeze Lenis BEFORE the React commit. If we don't, a RAF tick can fire
-    // between the DOM update and our useLayoutEffect and pull the user away
-    // from the anchor we're about to set.
-    window.__lenis?.stop();
-
-    notifyConsumed();
-  }
-
-  return (
-    <div ref={containerRef}>
-      {consumed ? (
-        <PassThroughRow />
-      ) : (
-        <ScrollJackedShowcase onConsumed={handleConsumed} />
-      )}
-    </div>
-  );
+  // Reduced-motion users always get the vertical stack — full stop. Don't
+  // trade it for fancier behavior they didn't ask for.
+  if (reduced) return <FallbackStack />;
+  // Future visit in this tab — render the compact grid directly. The decision
+  // happens once at mount time; we never swap during the page view.
+  if (consumed) return <CompactGrid />;
+  return <ScrollJackedShowcase />;
 }
 
-/* ---- scroll-jacked first pass ---- */
+/* ---- scroll-jacked first pass with in-mount lock ---- */
 
-function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
+function ScrollJackedShowcase() {
   const wrapperRef = useRef<HTMLElement | null>(null);
   const panelCount = panels.length;
   const wrapperVh = (panelCount - 1) * 120 + 100;
@@ -230,18 +155,41 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
     offset: ["start start", "end end"],
   });
 
+  /**
+   * Ratchet — a MotionValue that mirrors scrollYProgress on the way up but
+   * never decreases. Both the panel translate and the progress dots key off
+   * this single value. Effects:
+   *   - Forward scroll: panels pan smoothly.
+   *   - Backward scroll: panels stay where they ended up. No re-pan.
+   *   - At >= 0.99: ratchet is pinned to 1.0, sessionStorage is written.
+   *
+   * No layout change. No conditional render. No prop-type swap on x. The
+   * wrapper stays at its full height for the entire mount.
+   */
+  const ratchet = useMotionValue(0);
+  const lastProgressRef = useRef(0);
+  const completionFiredRef = useRef(false);
+
+  useMotionValueEvent(scrollYProgress, "change", (value) => {
+    if (value > lastProgressRef.current) {
+      lastProgressRef.current = value;
+      ratchet.set(value);
+    }
+    if (!completionFiredRef.current && value >= 0.99) {
+      completionFiredRef.current = true;
+      ratchet.set(1); // pin to absolute end so x lands at translatePct exactly
+      notifyConsumed(); // persists for future mounts
+    }
+  });
+
+  // Map ratcheted progress → horizontal translate. The 0.05 / 0.95 padding
+  // gives the first and last panels a moment of "rest" at the edges of the
+  // sticky range — they sit fully on screen rather than half-arrived.
   const x = useTransform(
-    scrollYProgress,
+    ratchet,
     [0.05, 0.95],
     ["0%", `${translatePct}%`],
   );
-
-  // Fire consumption near the very end of the pan. Lenis can plateau slightly
-  // below 1.0, so 0.99 is a reliable trigger; the consumedRuntime guard inside
-  // handleConsumed prevents repeat fires.
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
-    if (v >= 0.99) onConsumed();
-  });
 
   return (
     <section
@@ -254,13 +202,9 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
         <motion.div
           style={{
             x,
-            // GPU compositing hints. NOTE: do NOT add `contain: paint` here.
-            // The track is 100vw wide but its four 100vw children overflow to
-            // 400vw. `contain: paint` clips painting to the track's box, which
-            // turned the off-track panels invisible — only the panel sitting
-            // inside the track's current bounding box would render. We rely
-            // on per-panel `contain` (PanelSlide below) for paint isolation,
-            // which is safe because each panel fully contains its own content.
+            // GPU compositing hints. Note: NO `contain: paint` here — the
+            // four 100vw panels overflow the 100vw track, and contain:paint
+            // would clip the off-track ones invisible.
             willChange: "transform",
             backfaceVisibility: "hidden",
             transform: "translateZ(0)",
@@ -286,7 +230,7 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
               key={index}
               index={index}
               total={panelCount}
-              progress={scrollYProgress}
+              progress={ratchet}
             />
           ))}
         </div>
@@ -299,47 +243,54 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
   );
 }
 
-/* ---- pass-through horizontal-snap row, after consumption ---- */
+/* ---- compact grid (future-mount mode) ---- */
+/* Replaces the previous horizontal-snap PassThroughRow per spec — once the
+   user has consumed the cinematic, give them a normal vertical/grid section
+   so they can maneuver naturally, not another scroll-snap thing. */
 
-function PassThroughRow() {
+function CompactGrid() {
   return (
     <section
       aria-label="What goes into a Nathan Godinez record"
-      className="relative isolate h-dvh overflow-hidden"
+      className="section"
       style={{
         background:
           "radial-gradient(80% 60% at 50% 35%, #1a1614 0%, #0c0a09 60%, #060504 100%)",
       }}
     >
-      <div
-        className="flex h-full snap-x snap-mandatory items-center gap-6 overflow-x-auto px-[max(2.5rem,calc((100vw-1280px)/2+1.25rem))] pb-8"
-        style={{ scrollbarWidth: "none" }}
-      >
-        {panels.map((panel) => (
-          <article
-            key={panel.title}
-            className="flex h-[78%] w-[min(86vw,640px)] shrink-0 snap-center flex-col justify-end overflow-hidden rounded-3xl p-10 text-white"
-            style={{ background: panel.background }}
-          >
-            <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
-              {panel.eyebrow}
-            </p>
-            <h3 className="display mt-3 text-[clamp(1.75rem,3.5vw,2.5rem)]">
-              {panel.title}
-            </h3>
-            <p className="mt-3 max-w-md text-[14px] opacity-80">{panel.body}</p>
-          </article>
-        ))}
-      </div>
+      <div className="container-x">
+        <div className="mb-10 max-w-2xl text-white">
+          <p className="text-[12px] uppercase tracking-[0.25em] text-white/55">
+            The process
+          </p>
+          <h2 className="display mt-3 text-[clamp(2rem,5vw,4rem)]">
+            What goes into a record.
+          </h2>
+        </div>
 
-      <style>{`
-        section[aria-label="What goes into a Nathan Godinez record"] [class*="snap-x"]::-webkit-scrollbar { display: none; }
-      `}</style>
+        <div className="grid gap-5 md:grid-cols-2">
+          {panels.map((panel) => (
+            <article
+              key={panel.title}
+              className="flex min-h-[260px] flex-col justify-end overflow-hidden rounded-3xl p-8 text-white"
+              style={{ background: panel.background }}
+            >
+              <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
+                {panel.eyebrow}
+              </p>
+              <h3 className="display mt-3 text-[clamp(1.65rem,3vw,2.35rem)]">
+                {panel.title}
+              </h3>
+              <p className="mt-3 max-w-md text-[14px] opacity-80">{panel.body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
 
-/* ---- reduced-motion fallback (UNCHANGED — accessibility) ---- */
+/* ---- reduced-motion fallback (UNCHANGED) ---- */
 
 function FallbackStack() {
   return (
@@ -385,6 +336,8 @@ function PanelSlide({
       className="relative flex h-full w-screen shrink-0 items-center"
       style={{
         background: panel.background,
+        // Per-panel paint containment is safe: each panel's content fits
+        // within its 100vw box, so paint clipping has nothing to clip away.
         contain: "layout paint",
       }}
     >
@@ -423,7 +376,7 @@ function ProgressDot({
 }: {
   index: number;
   total: number;
-  progress: ReturnType<typeof useScroll>["scrollYProgress"];
+  progress: MotionValue<number>;
 }) {
   const start = (index - 0.4) / (total - 1);
   const end = (index + 0.4) / (total - 1);
