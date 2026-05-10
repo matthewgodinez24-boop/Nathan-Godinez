@@ -194,9 +194,9 @@ function ConsumableShowcase() {
     // height above doesn't change between modes, so this Y is stable.
     const rect = containerRef.current.getBoundingClientRect();
     const sectionTop = rect.top + window.scrollY;
-    // After the swap the section is exactly 100vh; we want the user at its
-    // bottom edge — i.e. the start of the next section (Featured Music).
-    targetYRef.current = sectionTop + window.innerHeight;
+    // Land the user AT the top of the (now 100vh) snap row — they should see
+    // the row they just unlocked, not be flung past it into Featured Music.
+    targetYRef.current = sectionTop;
 
     // Freeze Lenis BEFORE the React commit. If we don't, a RAF tick can fire
     // between the DOM update and our useLayoutEffect and pull the user away
@@ -254,13 +254,16 @@ function ScrollJackedShowcase({ onConsumed }: { onConsumed: () => void }) {
         <motion.div
           style={{
             x,
-            // GPU layer + paint containment — the track is ~5760px wide on a
-            // 1440px viewport; without these, scroll-velocity spikes can cause
-            // main-thread re-rasterization and visible stutter.
+            // GPU compositing hints. NOTE: do NOT add `contain: paint` here.
+            // The track is 100vw wide but its four 100vw children overflow to
+            // 400vw. `contain: paint` clips painting to the track's box, which
+            // turned the off-track panels invisible — only the panel sitting
+            // inside the track's current bounding box would render. We rely
+            // on per-panel `contain` (PanelSlide below) for paint isolation,
+            // which is safe because each panel fully contains its own content.
             willChange: "transform",
             backfaceVisibility: "hidden",
             transform: "translateZ(0)",
-            contain: "layout paint",
           }}
           className="flex h-full"
         >
