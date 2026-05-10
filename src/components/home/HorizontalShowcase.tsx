@@ -88,9 +88,6 @@ const TRANSITION = "transform 700ms cubic-bezier(0.5, 0, 0.1, 1)";
 const DRAG_THRESHOLD = 0.18;
 // Accumulated wheel deltaX (px) needed to trigger one card advance.
 const WHEEL_THRESHOLD = 50;
-// After this much idle time, the wheel gesture is considered over and the
-// accumulator + per-gesture lock both reset.
-const WHEEL_GESTURE_END_MS = 200;
 
 type DragState = { startX: number; offset: number; pointerId: number };
 
@@ -111,60 +108,55 @@ export function HorizontalShowcase() {
   }, [isPlaying, isDragging]);
 
   /* ---- wheel: trackpad horizontal swipe ---- */
-  // React's onWheel adds passive listeners which can't preventDefault; we need
-  // a native non-passive listener so we can stop the page from scrolling
-  // sideways or vertically when the gesture is clearly horizontal.
+  // React's onWheel registers passive listeners which can't preventDefault.
+  // We need a native non-passive listener so the page doesn't scroll
+  // sideways/vertically when the gesture is clearly horizontal.
+  //
+  // Gesture detection via TIME GAPS, not timers. Trackpad inertia fires wheel
+  // events continuously for 1+ seconds after the active swipe, with small
+  // gaps (16-50ms) between them. A new gesture is identified by a
+  // significantly larger gap (>120ms of silence). The `gestureAdvanced` flag
+  // is scoped to one gesture and resets the moment a new gesture starts —
+  // no setTimeout, nothing to leak, nothing for inertia to extend.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
     let accum = 0;
-    let gestureLocked = false;
-    let endTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const scheduleEnd = () => {
-      if (endTimer) clearTimeout(endTimer);
-      endTimer = setTimeout(() => {
-        accum = 0;
-        gestureLocked = false;
-        endTimer = null;
-      }, WHEEL_GESTURE_END_MS);
-    };
+    let lastEventTime = 0;
+    let gestureAdvanced = false;
+    const NEW_GESTURE_GAP_MS = 120;
 
     const onWheel = (e: WheelEvent) => {
-      // Only handle clearly horizontal intent — otherwise let the page scroll
-      // vertically as normal. Threshold prevents tiny diagonal noise from
-      // hijacking vertical scrolls.
       if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
-
       e.preventDefault();
 
-      if (gestureLocked) {
-        // Already advanced for this gesture — eat remaining events until the
-        // gesture ends, but reset the timer so we don't release prematurely.
-        scheduleEnd();
-        return;
+      const now = performance.now();
+      if (now - lastEventTime > NEW_GESTURE_GAP_MS) {
+        // It's been quiet for >120ms → this is a new gesture. Reset.
+        accum = 0;
+        gestureAdvanced = false;
       }
+      lastEventTime = now;
+
+      // Already advanced once this gesture — eat the rest of the inertia tail.
+      if (gestureAdvanced) return;
 
       accum += e.deltaX;
-      scheduleEnd();
 
       if (accum >= WHEEL_THRESHOLD) {
         setActiveIndex((i) => Math.min(i + 1, highlights.length - 1));
-        gestureLocked = true;
+        gestureAdvanced = true;
         accum = 0;
       } else if (accum <= -WHEEL_THRESHOLD) {
         setActiveIndex((i) => Math.max(i - 1, 0));
-        gestureLocked = true;
+        gestureAdvanced = true;
         accum = 0;
       }
     };
 
     viewport.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      viewport.removeEventListener("wheel", onWheel);
-      if (endTimer) clearTimeout(endTimer);
-    };
+    return () => viewport.removeEventListener("wheel", onWheel);
   }, []);
 
   function jumpTo(index: number) {
