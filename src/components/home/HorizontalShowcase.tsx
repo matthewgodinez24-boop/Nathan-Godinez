@@ -1,23 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
- * Highlights — modeled on Apple's "Get the highlights" carousel
- * (apple.com/macbook-pro). Behavior:
+ * Highlights — Apple-style full-bleed carousel.
  *
- *   - Header row: title on the left, pagination dots + play/pause on the right.
- *   - Cards in a horizontal scroller with scroll-snap-x.
- *   - Auto-advance toggles via the play button. Default is paused.
- *   - Clicking a dot jumps to that card and pauses auto-advance.
- *   - Manually swiping/scrolling updates the active dot in real time.
- *   - Vertical page scroll passes through normally; this section never
- *     intercepts scroll.
+ * Architecture: a single `track` <div> containing all cards side-by-side at
+ * 100vw each. The track is positioned via `transform: translate3d(...)` and
+ * driven by a `--active` CSS variable. Every transition — auto-advance,
+ * pagination dot click, and the snap after a drag — uses the SAME CSS
+ * transition (700ms, custom Apple-flavored cubic-bezier). That's what gives
+ * the consistent, predictable feel the previous native-scroll version
+ * couldn't deliver.
  *
- * No scroll-jacking, no sessionStorage, no Lenis interaction. The carousel
- * is a self-contained component — its only DOM contact is its own scroller
- * div via `scrollerRef`.
+ * Why not native scroll-snap:
+ *   - `scrollTo({ behavior: "smooth" })` has implementation-defined timing
+ *     (different on Chrome vs. Safari vs. mobile). Inconsistent feel.
+ *   - `snap-mandatory` competes with smooth scroll mid-flight, producing the
+ *     "chunky" jitter that prompted this rewrite.
+ *   - Lenis was eating wheel events globally — even `data-lenis-prevent`
+ *     wasn't enough because trackpad horizontal-swipe goes through wheel.
+ *
+ * What this gives us instead:
+ *   - GPU-composited transform on the track; one transition per slide change.
+ *   - Identical timing for autoplay, dot click, and drag-snap. Every advance
+ *     "feels the same."
+ *   - Drag/swipe support via pointer events with elastic-free snap on release.
+ *   - Vertical page scroll passes through naturally — `touch-action: pan-y`
+ *     on the track lets the OS handle vertical gestures.
  */
 
 type Highlight = {
@@ -78,113 +89,90 @@ const highlights: Highlight[] = [
 ];
 
 const AUTO_ADVANCE_MS = 6000;
+// Apple-flavored easing — slower start, quick middle, gentle settle.
+const TRANSITION = "transform 700ms cubic-bezier(0.5, 0, 0.1, 1)";
+// How far the user has to drag (as a fraction of viewport width) for the
+// release to advance to the next/prev card. Below this threshold, snap back.
+const DRAG_THRESHOLD = 0.18;
+
+type DragState = { startX: number; offset: number; pointerId: number };
 
 export function HorizontalShowcase() {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  // Default: paused. User has to click play to enable auto-advance —
-  // matches Apple's default and avoids surprising motion on page load.
   const [isPlaying, setIsPlaying] = useState(false);
-  // While true, the manual-scroll listener ignores incoming `scroll` events.
-  // Set when we kick off a programmatic smooth scroll, cleared after the
-  // smooth scroll settles. Without this, the listener races the smooth
-  // scroll mid-flight and snaps activeIndex back to the prior card.
-  const programmaticScrollRef = useRef(false);
-  const programmaticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const isDragging = drag !== null;
 
-  // Smooth-scroll the carousel so the card at `index` is centered.
-  const scrollToIndex = useCallback((index: number) => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    const cards = scroller.querySelectorAll<HTMLElement>("[data-card]");
-    const card = cards[index];
-    if (!card) return;
-    // Center the card within the scroller's viewport.
-    const target =
-      card.offsetLeft - (scroller.clientWidth - card.offsetWidth) / 2;
-
-    // Lock the manual-scroll listener for ~900ms — longer than CSS smooth
-    // scroll typically takes — so the listener doesn't fight us mid-flight.
-    programmaticScrollRef.current = true;
-    if (programmaticTimerRef.current) clearTimeout(programmaticTimerRef.current);
-    programmaticTimerRef.current = setTimeout(() => {
-      programmaticScrollRef.current = false;
-    }, 900);
-
-    scroller.scrollTo({
-      left: Math.max(0, target),
-      behavior: "smooth",
-    });
-  }, []);
-
-  // Auto-advance loop. Inside the interval callback (an async, browser-
-  // scheduled task), we call setActiveIndex with a function updater so we
-  // always read the latest current value without it being a stale closure.
+  /**
+   * Auto-advance loop. Pauses while the user is mid-drag (otherwise the
+   * track would jump under their finger). Stays running across releases —
+   * if the user drags to slide 2, the next tick advances to 3 from there.
+   */
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || isDragging) return;
     const interval = setInterval(() => {
       setActiveIndex((current) => (current + 1) % highlights.length);
     }, AUTO_ADVANCE_MS);
     return () => clearInterval(interval);
-  }, [isPlaying]);
-
-  // When the active index changes (auto-advance, dot click, etc.) ensure the
-  // scroller is synced. This effect doesn't call setState, only scrollTo —
-  // so the lint rule `react-hooks/set-state-in-effect` isn't triggered.
-  useEffect(() => {
-    scrollToIndex(activeIndex);
-  }, [activeIndex, scrollToIndex]);
-
-  // Track the user's manual scroll so the active dot follows their finger.
-  // The setState inside this RAF-scheduled callback runs in an async task,
-  // not in an effect body — it's a normal event-handler-style update.
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-
-    let rafId = 0;
-    const updateActive = () => {
-      // Suppress while a programmatic smooth scroll is in flight. Otherwise
-      // the listener computes "closest card is the OLD card" mid-flight and
-      // calls setActiveIndex back to the old index — feedback loop, scroll
-      // never advances. This is exactly the autoplay-not-working bug.
-      if (programmaticScrollRef.current) return;
-
-      const cards = scroller.querySelectorAll<HTMLElement>("[data-card]");
-      if (cards.length === 0) return;
-
-      const center = scroller.scrollLeft + scroller.clientWidth / 2;
-      let closestIdx = 0;
-      let closestDist = Infinity;
-      cards.forEach((card, i) => {
-        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-        const dist = Math.abs(cardCenter - center);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closestIdx = i;
-        }
-      });
-      setActiveIndex((current) =>
-        current === closestIdx ? current : closestIdx,
-      );
-    };
-
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(updateActive);
-    };
-
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      scroller.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
+  }, [isPlaying, isDragging]);
 
   function jumpTo(index: number) {
-    setIsPlaying(false);
     setActiveIndex(index);
   }
+
+  function togglePlay() {
+    setIsPlaying((p) => !p);
+  }
+
+  /* ---- pointer-driven drag-to-swipe ---- */
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    // Only respond to primary mouse button or touch/pen.
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    setDrag({ startX: e.clientX, offset: 0, pointerId: e.pointerId });
+    // Capture so subsequent move/up events come to this element even if the
+    // pointer leaves it. Critical for fast flicks.
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    setDrag({ ...drag, offset: e.clientX - drag.startX });
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const offset = e.clientX - drag.startX;
+    const threshold = window.innerWidth * DRAG_THRESHOLD;
+    let next = activeIndex;
+    if (offset < -threshold && activeIndex < highlights.length - 1) {
+      next = activeIndex + 1;
+    } else if (offset > threshold && activeIndex > 0) {
+      next = activeIndex - 1;
+    }
+    setActiveIndex(next);
+    setDrag(null);
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  }
+
+  /* ---- transform composition ---- */
+
+  // Base offset: -activeIndex * 100vw (each card is one viewport wide).
+  // Drag offset (px): added to the base so the track follows the finger.
+  // No transition during drag → finger-tight tracking. Transition snaps in
+  // on release / state change.
+  const trackStyle: React.CSSProperties = {
+    transform: `translate3d(calc(${-activeIndex} * 100vw + ${
+      drag?.offset ?? 0
+    }px), 0, 0)`,
+    transition: isDragging ? "none" : TRANSITION,
+    willChange: "transform",
+    backfaceVisibility: "hidden",
+    // Allow vertical page scroll to pass through; capture horizontal gestures
+    // for our pointer handler.
+    touchAction: "pan-y",
+    userSelect: isDragging ? "none" : undefined,
+  };
 
   return (
     <section className="py-24 md:py-32" aria-label="Catalog highlights">
@@ -208,41 +196,39 @@ export function HorizontalShowcase() {
               active={activeIndex}
               onPick={jumpTo}
             />
-            <PlayPauseButton
-              isPlaying={isPlaying}
-              onToggle={() => setIsPlaying((p) => !p)}
-            />
+            <PlayPauseButton isPlaying={isPlaying} onToggle={togglePlay} />
           </div>
         </div>
       </div>
 
-      {/* Horizontal scroller.
-          `data-lenis-prevent` tells the global Lenis instance NOT to intercept
-          wheel/touch events that originate inside this element. Without it,
-          Lenis's `smoothWheel: true` + `preventDefault()` consumes the wheel
-          event before the browser can apply native horizontal scroll — the
-          carousel feels "chunky" because trackpad-deltaX gets dropped. */}
+      {/* Viewport — one card visible at a time */}
       <div
-        ref={scrollerRef}
+        className="mt-10 overflow-hidden"
+        // data-lenis-prevent here too as a defensive measure; the transform
+        // approach doesn't depend on native scroll, but if a future change
+        // ever introduces an inner scroller, this keeps Lenis off it.
         data-lenis-prevent
-        className="mt-10 overflow-x-auto pb-6"
-        style={{ scrollbarWidth: "none" }}
       >
-        <ul
-          className="flex snap-x snap-mandatory gap-5 px-[max(1.25rem,calc((100vw-1280px)/2+1.25rem))]"
+        <div
+          className="flex"
+          style={trackStyle}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         >
           {highlights.map((h) => (
-            <li key={h.category} className="snap-center">
+            <div
+              key={h.category}
+              className="w-screen shrink-0 px-4 sm:px-8 md:px-12"
+              // The wrapper provides side padding so the card isn't flush to
+              // the viewport edge. The card itself fills the remaining space.
+            >
               <HighlightCard highlight={h} />
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
-
-      {/* Hide the horizontal scrollbar in webkit browsers, scoped to this section */}
-      <style>{`
-        section[aria-label="Catalog highlights"] .overflow-x-auto::-webkit-scrollbar { display: none; }
-      `}</style>
     </section>
   );
 }
@@ -253,10 +239,16 @@ function HighlightCard({ highlight }: { highlight: Highlight }) {
   return (
     <Link
       href={highlight.href}
-      data-card
       aria-label={`${highlight.category}: ${highlight.title}`}
-      className="group relative flex h-[clamp(420px,58vh,540px)] w-[clamp(280px,80vw,720px)] shrink-0 flex-col justify-between overflow-hidden rounded-[28px] p-8 text-white md:p-12"
+      // Card fills the viewport-padded slot. Tall enough to feel cinematic
+      // without forcing the user to scroll past a wall.
+      className="group relative flex h-[clamp(440px,60vh,560px)] w-full flex-col justify-between overflow-hidden rounded-[28px] p-8 text-white md:p-12"
       style={{ background: highlight.background }}
+      // The card is a Link — it shouldn't fight the parent's pointer-drag.
+      // `draggable={false}` prevents the browser's native image-drag from
+      // initiating during a swipe.
+      draggable={false}
+      onDragStart={(e) => e.preventDefault()}
     >
       <div
         aria-hidden
@@ -267,7 +259,7 @@ function HighlightCard({ highlight }: { highlight: Highlight }) {
         }}
       />
 
-      <div className="relative z-10 flex items-baseline justify-between">
+      <div className="relative z-10 flex items-baseline">
         <span className="text-[12px] uppercase tracking-[0.3em] opacity-70">
           {highlight.category}
         </span>
