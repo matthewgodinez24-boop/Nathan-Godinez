@@ -85,6 +85,12 @@ export function HorizontalShowcase() {
   // Default: paused. User has to click play to enable auto-advance —
   // matches Apple's default and avoids surprising motion on page load.
   const [isPlaying, setIsPlaying] = useState(false);
+  // While true, the manual-scroll listener ignores incoming `scroll` events.
+  // Set when we kick off a programmatic smooth scroll, cleared after the
+  // smooth scroll settles. Without this, the listener races the smooth
+  // scroll mid-flight and snaps activeIndex back to the prior card.
+  const programmaticScrollRef = useRef(false);
+  const programmaticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Smooth-scroll the carousel so the card at `index` is centered.
   const scrollToIndex = useCallback((index: number) => {
@@ -96,6 +102,15 @@ export function HorizontalShowcase() {
     // Center the card within the scroller's viewport.
     const target =
       card.offsetLeft - (scroller.clientWidth - card.offsetWidth) / 2;
+
+    // Lock the manual-scroll listener for ~900ms — longer than CSS smooth
+    // scroll typically takes — so the listener doesn't fight us mid-flight.
+    programmaticScrollRef.current = true;
+    if (programmaticTimerRef.current) clearTimeout(programmaticTimerRef.current);
+    programmaticTimerRef.current = setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, 900);
+
     scroller.scrollTo({
       left: Math.max(0, target),
       behavior: "smooth",
@@ -129,6 +144,12 @@ export function HorizontalShowcase() {
 
     let rafId = 0;
     const updateActive = () => {
+      // Suppress while a programmatic smooth scroll is in flight. Otherwise
+      // the listener computes "closest card is the OLD card" mid-flight and
+      // calls setActiveIndex back to the old index — feedback loop, scroll
+      // never advances. This is exactly the autoplay-not-working bug.
+      if (programmaticScrollRef.current) return;
+
       const cards = scroller.querySelectorAll<HTMLElement>("[data-card]");
       if (cards.length === 0) return;
 
@@ -195,9 +216,15 @@ export function HorizontalShowcase() {
         </div>
       </div>
 
-      {/* Horizontal scroller */}
+      {/* Horizontal scroller.
+          `data-lenis-prevent` tells the global Lenis instance NOT to intercept
+          wheel/touch events that originate inside this element. Without it,
+          Lenis's `smoothWheel: true` + `preventDefault()` consumes the wheel
+          event before the browser can apply native horizontal scroll — the
+          carousel feels "chunky" because trackpad-deltaX gets dropped. */}
       <div
         ref={scrollerRef}
+        data-lenis-prevent
         className="mt-10 overflow-x-auto pb-6"
         style={{ scrollbarWidth: "none" }}
       >
