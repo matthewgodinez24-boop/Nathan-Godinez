@@ -3,20 +3,18 @@
 import { useEffect } from "react";
 
 /**
- * Forces the homepage to land at the top on every mount.
+ * Forces the homepage to land at the top, but only on a fresh visit (showcase
+ * not yet consumed in this tab).
  *
- * Why:
- * - The showcase below the hero is a tall scroll-jacked section. If the
- *   browser restores a stale mid-page scrollY (cmd+R, back-forward), the
- *   user lands inside the cinematic with no context. Forcing top → they
- *   start at the hero, every time.
- * - We also disable native `history.scrollRestoration` so back-forward
- *   navigation doesn't override us.
+ * - Fresh visit: showcase will render the tall scroll-jacked mode. If browser
+ *   scroll restoration drops the user mid-page, they land inside the cinematic
+ *   with no context. Force-to-top puts them at the hero, ready to scroll in.
+ * - Returning visit (consumed flag set): showcase renders the short
+ *   PassThroughRow. We let the browser handle scroll naturally so back/forward
+ *   nav and tab restore feel right.
  *
- * Trade-off: navigating /store → / lands at the top of the home page rather
- * than wherever they last were. Acceptable because home, /store, /about, and
- * /contact have different layouts — preserving scrollY across them isn't
- * meaningful anyway.
+ * `history.scrollRestoration = "manual"` is set unconditionally so we always
+ * own the policy.
  */
 export function ScrollToTopOnLoad() {
   useEffect(() => {
@@ -24,7 +22,15 @@ export function ScrollToTopOnLoad() {
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    let consumed = false;
+    try {
+      consumed = sessionStorage.getItem("showcase-consumed") === "1";
+    } catch {
+      // storage blocked → treat as fresh visit, force to top
+    }
+    if (!consumed) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
   }, []);
   return null;
 }
