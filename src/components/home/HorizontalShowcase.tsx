@@ -1,400 +1,180 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
-import {
-  motion,
-  useMotionValue,
-  useMotionValueEvent,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-  type MotionValue,
-} from "framer-motion";
+import Link from "next/link";
 
 /**
- * Horizontal showcase — three render branches, no mid-mount layout shifts.
+ * Highlights — a normal horizontal-scroll section.
  *
- *   prefers-reduced-motion (any state) → <FallbackStack />
- *     Vertical accessible stack. Untouched.
+ * Pattern: Apple's "Get the highlights" carousel on the MacBook Pro page.
+ * One card per product category. The user scrolls horizontally with their
+ * trackpad / shift+wheel / drag, and the cards snap into place. Vertical
+ * scroll passes through the page normally — there is no scroll-jacking,
+ * no force-once logic, no sessionStorage, no Lenis interaction.
  *
- *   First visit per browser tab (consumed === false) → <ScrollJackedShowcase />
- *     Tall wrapper (~460vh), sticky 100vh inner, panels translate horizontally
- *     as the user scrolls vertically. Lenis (mounted globally) smooths input.
- *     When the user reaches the end ONCE, sessionStorage flag is written and
- *     the panel track *locks* on panel 4. The wrapper does NOT collapse and
- *     we do NOT call window.scrollTo or lenis.scrollTo — the section stays
- *     mounted at its full height for the rest of this page view. Scrolling
- *     back up does not replay the swipe animation; panel 4 stays put.
- *
- *   Future visit in same tab (consumed === true on mount) → <CompactGrid />
- *     A normal vertical grid of the same content. No scroll-jack, no sticky,
- *     no Lenis interaction. The decision happens at mount time, so there's
- *     no mid-page swap to coordinate.
- *
- * The previous architectures swapped the wrapper from ~460vh to 100vh while
- * the user was inside it, then tried to compensate scroll with window.scrollTo
- * and lenis.scrollTo. Every variant of that had failure modes (browser
- * auto-clamping scrollY before our compensation ran, Lenis lerping toward
- * a stale target, etc.). This version eliminates the swap entirely; the
- * "locked panel 4" state is implemented at the data layer via a ratcheted
- * MotionValue, not at the layout layer.
+ * If a category is added or removed, edit the `highlights` array below.
  */
 
-/* ---- module-level external store for the consumed flag ---- */
-
-const STORAGE_KEY = "showcase-consumed";
-
-let consumedRuntime = false;
-let consumedHydrated = false;
-const consumedSubscribers = new Set<() => void>();
-
-function readConsumed(): boolean {
-  if (!consumedHydrated) {
-    consumedHydrated = true;
-    try {
-      consumedRuntime = sessionStorage.getItem(STORAGE_KEY) === "1";
-    } catch {
-      // sessionStorage may be blocked (private browsing, sandboxed iframes).
-      // Runtime override below still works for the lifetime of the tab.
-    }
-  }
-  return consumedRuntime;
-}
-
-function notifyConsumed(): void {
-  if (consumedRuntime) return;
-  consumedRuntime = true;
-  consumedHydrated = true;
-  try {
-    sessionStorage.setItem(STORAGE_KEY, "1");
-  } catch {
-    // ignore — runtime flag still gives correct behavior for this tab.
-  }
-  consumedSubscribers.forEach((cb) => cb());
-}
-
-function subscribeConsumed(cb: () => void): () => void {
-  consumedSubscribers.add(cb);
-  return () => {
-    consumedSubscribers.delete(cb);
-  };
-}
-
-const getServerConsumedSnapshot = () => false;
-
-/* ---- panels ---- */
-
-type Panel = {
-  eyebrow: string;
+type Highlight = {
+  number: string;
+  category: string;
   title: string;
   body: string;
   background: string;
+  // Where this card's CTA sends the user. /beats is the catalog with the
+  // appropriate type filter; the marketplace handles empty states honestly
+  // (e.g. "No loops yet").
+  href: string;
+  ctaLabel: string;
 };
 
-const panels: Panel[] = [
+const highlights: Highlight[] = [
   {
-    eyebrow: "01 - Tone",
-    title: "Tracked through analog.",
-    body: "Every guitar passes through tube amps, tape saturation, and a real room before it ever hits the DAW.",
+    number: "01",
+    category: "Beats",
+    title: "Full instrumentals.",
+    body: "Tracked through tube amps and tape. Built for vocalists who want to live inside the song.",
     background:
-      "radial-gradient(60% 60% at 30% 30%, rgba(126,87,194,0.55), transparent 60%), linear-gradient(135deg, #100912, #2a1336 65%, #4a1d4a)",
+      "radial-gradient(70% 60% at 30% 30%, rgba(255,90,60,0.45), transparent 65%), linear-gradient(140deg, #160505 0%, #58110d 55%, #cf1d18 100%)",
+    href: "/beats",
+    ctaLabel: "Browse beats",
   },
   {
-    eyebrow: "02 - Craft",
-    title: "Written like a song.",
-    body: "Beats, loops, and full instrumentals with structure. Verses, lifts, bridges - built so a vocal can live in them.",
+    number: "02",
+    category: "Loops",
+    title: "Tagged guitar loops.",
+    body: "BPM- and key-tagged guitar and percussion loops. Royalty-free, drop them straight into your DAW.",
     background:
-      "radial-gradient(60% 60% at 70% 35%, rgba(255,154,0,0.4), transparent 60%), linear-gradient(135deg, #1a0e07, #3a1e0c 60%, #6b2f12)",
+      "radial-gradient(70% 60% at 70% 30%, rgba(95,255,170,0.35), transparent 65%), linear-gradient(140deg, #04140b 0%, #0d3a25 55%, #1d5a3a 100%)",
+    href: "/beats",
+    ctaLabel: "Browse loops",
   },
   {
-    eyebrow: "03 - Collaboration",
-    title: "Built with other artists.",
-    body: "Vocalists, co-producers, engineers, visual artists. Every release ships with credits and transparent splits.",
+    number: "03",
+    category: "Songs",
+    title: "Finished records.",
+    body: "Co-produced features with vocalists, available for direct release or sync placement.",
     background:
-      "radial-gradient(60% 60% at 50% 30%, rgba(0,180,255,0.4), transparent 60%), linear-gradient(135deg, #051018, #0d2238 65%, #163c5a)",
+      "radial-gradient(70% 60% at 50% 30%, rgba(255,126,195,0.4), transparent 65%), linear-gradient(140deg, #170518 0%, #511239 55%, #a01e6b 100%)",
+    href: "/beats",
+    ctaLabel: "Browse songs",
   },
   {
-    eyebrow: "04 - Finish",
-    title: "Mixed for streaming.",
-    body: "Loud where loud belongs, quiet where it counts. Masters checked across earbuds, monitors, and the car.",
+    number: "04",
+    category: "Scores",
+    title: "Cinematic cues.",
+    body: "Slow-build instrumentals for film, TV, trailer, and documentary scoring.",
     background:
-      "radial-gradient(60% 60% at 40% 30%, rgba(255,210,140,0.3), transparent 60%), linear-gradient(135deg, #0f0f0f, #1f1c19 65%, #3a3128)",
+      "radial-gradient(70% 60% at 40% 30%, rgba(93,167,214,0.42), transparent 65%), linear-gradient(140deg, #040816 0%, #102245 55%, #1d2c8f 100%)",
+    href: "/beats",
+    ctaLabel: "Browse scores",
+  },
+  {
+    number: "05",
+    category: "Kits",
+    title: "Sound kits.",
+    body: "Curated drum, guitar, and texture bundles. WAV, key- and BPM-tagged, royalty-free.",
+    background:
+      "radial-gradient(70% 60% at 60% 30%, rgba(255,180,106,0.42), transparent 65%), linear-gradient(140deg, #1a0a04 0%, #6b2a10 55%, #d65a1d 100%)",
+    href: "/beats",
+    ctaLabel: "Browse kits",
   },
 ];
 
-/* ---- root: route between three modes ---- */
-
 export function HorizontalShowcase() {
-  // Both hooks always called — no conditional hooks. Branching happens after.
-  const reduced = useReducedMotion();
-  const consumed = useSyncExternalStore(
-    subscribeConsumed,
-    readConsumed,
-    getServerConsumedSnapshot,
-  );
-
-  // Reduced-motion users always get the vertical stack — full stop. Don't
-  // trade it for fancier behavior they didn't ask for.
-  if (reduced) return <FallbackStack />;
-  // Future visit in this tab — render the compact grid directly. The decision
-  // happens once at mount time; we never swap during the page view.
-  if (consumed) return <CompactGrid />;
-  return <ScrollJackedShowcase />;
-}
-
-/* ---- scroll-jacked first pass with in-mount lock ---- */
-
-function ScrollJackedShowcase() {
-  const wrapperRef = useRef<HTMLElement | null>(null);
-  const panelCount = panels.length;
-  const wrapperVh = (panelCount - 1) * 120 + 100;
-  const translatePct = -((panelCount - 1) * 100);
-
-  const { scrollYProgress } = useScroll({
-    target: wrapperRef,
-    offset: ["start start", "end end"],
-  });
-
-  /**
-   * Ratchet — a MotionValue that mirrors scrollYProgress on the way up but
-   * never decreases. Both the panel translate and the progress dots key off
-   * this single value. Effects:
-   *   - Forward scroll: panels pan smoothly.
-   *   - Backward scroll: panels stay where they ended up. No re-pan.
-   *   - At >= 0.99: ratchet is pinned to 1.0, sessionStorage is written.
-   *
-   * No layout change. No conditional render. No prop-type swap on x. The
-   * wrapper stays at its full height for the entire mount.
-   */
-  const ratchet = useMotionValue(0);
-  const lastProgressRef = useRef(0);
-  const completionFiredRef = useRef(false);
-
-  useMotionValueEvent(scrollYProgress, "change", (value) => {
-    if (value > lastProgressRef.current) {
-      lastProgressRef.current = value;
-      ratchet.set(value);
-    }
-    if (!completionFiredRef.current && value >= 0.99) {
-      completionFiredRef.current = true;
-      ratchet.set(1); // pin to absolute end so x lands at translatePct exactly
-      notifyConsumed(); // persists for future mounts
-    }
-  });
-
-  // Map ratcheted progress → horizontal translate. The 0.05 / 0.95 padding
-  // gives the first and last panels a moment of "rest" at the edges of the
-  // sticky range — they sit fully on screen rather than half-arrived.
-  const x = useTransform(
-    ratchet,
-    [0.05, 0.95],
-    ["0%", `${translatePct}%`],
-  );
-
   return (
     <section
-      ref={wrapperRef}
-      aria-label="What goes into a Nathan Godinez record"
-      style={{ height: `${wrapperVh}vh` }}
-      className="relative"
-    >
-      <div className="sticky top-0 h-dvh overflow-hidden">
-        <motion.div
-          style={{
-            x,
-            // GPU compositing hints. Note: NO `contain: paint` here — the
-            // four 100vw panels overflow the 100vw track, and contain:paint
-            // would clip the off-track ones invisible.
-            willChange: "transform",
-            backfaceVisibility: "hidden",
-            transform: "translateZ(0)",
-          }}
-          className="flex h-full"
-        >
-          {panels.map((panel, index) => (
-            <PanelSlide
-              key={panel.title}
-              panel={panel}
-              index={index}
-              total={panelCount}
-            />
-          ))}
-        </motion.div>
-
-        <div
-          aria-hidden
-          className="pointer-events-none absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-2"
-        >
-          {panels.map((_, index) => (
-            <ProgressDot
-              key={index}
-              index={index}
-              total={panelCount}
-              progress={ratchet}
-            />
-          ))}
-        </div>
-
-        <div className="pointer-events-none absolute right-8 top-8 text-[11px] uppercase tracking-[0.25em] text-white/60">
-          Scroll
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---- compact grid (future-mount mode) ---- */
-/* Replaces the previous horizontal-snap PassThroughRow per spec — once the
-   user has consumed the cinematic, give them a normal vertical/grid section
-   so they can maneuver naturally, not another scroll-snap thing. */
-
-function CompactGrid() {
-  return (
-    <section
-      aria-label="What goes into a Nathan Godinez record"
-      className="section"
-      style={{
-        background:
-          "radial-gradient(80% 60% at 50% 35%, #1a1614 0%, #0c0a09 60%, #060504 100%)",
-      }}
+      className="py-24 md:py-32"
+      aria-label="Catalog highlights"
     >
       <div className="container-x">
-        <div className="mb-10 max-w-2xl text-white">
-          <p className="text-[12px] uppercase tracking-[0.25em] text-white/55">
-            The process
-          </p>
-          <h2 className="display mt-3 text-[clamp(2rem,5vw,4rem)]">
-            What goes into a record.
-          </h2>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-2">
-          {panels.map((panel) => (
-            <article
-              key={panel.title}
-              className="flex min-h-[260px] flex-col justify-end overflow-hidden rounded-3xl p-8 text-white"
-              style={{ background: panel.background }}
-            >
-              <p className="text-[11px] uppercase tracking-[0.25em] opacity-75">
-                {panel.eyebrow}
-              </p>
-              <h3 className="display mt-3 text-[clamp(1.65rem,3vw,2.35rem)]">
-                {panel.title}
-              </h3>
-              <p className="mt-3 max-w-md text-[14px] opacity-80">{panel.body}</p>
-            </article>
-          ))}
-        </div>
+        <p
+          className="text-[12px] uppercase tracking-[0.25em]"
+          style={{ color: "var(--fg-mute)" }}
+        >
+          The catalog
+        </p>
+        <h2 className="display mt-3 max-w-3xl text-[clamp(2rem,5vw,3.5rem)]">
+          Get the highlights.
+        </h2>
+        <p
+          className="mt-3 max-w-xl text-[clamp(1rem,1.3vw,1.15rem)]"
+          style={{ color: "var(--fg-soft)" }}
+        >
+          Five things Nathan makes. Swipe through to see the catalog.
+        </p>
       </div>
-    </section>
-  );
-}
 
-/* ---- reduced-motion fallback (UNCHANGED) ---- */
-
-function FallbackStack() {
-  return (
-    <section
-      aria-label="What goes into a Nathan Godinez record"
-      className="section"
-      style={{ background: "var(--bg-soft)" }}
-    >
-      <div className="container-x grid gap-8">
-        {panels.map((panel) => (
-          <article
-            key={panel.title}
-            className="overflow-hidden rounded-3xl p-10 text-white"
-            style={{ background: panel.background }}
-          >
-            <p className="text-[12px] uppercase tracking-[0.25em] opacity-75">
-              {panel.eyebrow}
-            </p>
-            <h3 className="display mt-3 text-[clamp(1.75rem,4vw,3rem)]">
-              {panel.title}
-            </h3>
-            <p className="mt-4 max-w-xl text-[15px] opacity-85">{panel.body}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ---- sub-components ---- */
-
-function PanelSlide({
-  panel,
-  index,
-  total,
-}: {
-  panel: Panel;
-  index: number;
-  total: number;
-}) {
-  return (
-    <div
-      className="relative flex h-full w-screen shrink-0 items-center"
-      style={{
-        background: panel.background,
-        // Per-panel paint containment is safe: each panel's content fits
-        // within its 100vw box, so paint clipping has nothing to clip away.
-        contain: "layout paint",
-      }}
-    >
+      {/* The scroller. overflow-x-auto + snap-x. No vertical scroll-jacking. */}
       <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 80% at 50% 60%, transparent, rgba(0,0,0,0.45) 100%)",
-        }}
-      />
-      <div className="container-x relative z-10 grid gap-8 text-white md:grid-cols-12">
-        <div className="md:col-span-7 md:col-start-2">
-          <p className="text-[12px] uppercase tracking-[0.25em] opacity-75">
-            {panel.eyebrow}
-          </p>
-          <h3 className="display mt-4 text-[clamp(2.5rem,7vw,5.5rem)]">
-            {panel.title}
-          </h3>
-          <p className="mt-6 max-w-xl text-[clamp(1rem,1.5vw,1.25rem)] opacity-85">
-            {panel.body}
-          </p>
-        </div>
-        <div className="absolute bottom-8 right-8 text-[12px] uppercase tracking-[0.25em] opacity-60">
-          {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
-        </div>
+        className="mt-10 overflow-x-auto pb-6"
+        style={{ scrollbarWidth: "none" }}
+      >
+        <ul
+          className="flex snap-x snap-mandatory gap-6 px-[max(1.25rem,calc((100vw-1280px)/2+1.25rem))]"
+          // The snap-padding ensures the first card aligns with the rest of
+          // the page's horizontal padding instead of hugging the viewport edge.
+          style={{ scrollPaddingLeft: "1.25rem" }}
+        >
+          {highlights.map((h) => (
+            <HighlightCard key={h.category} highlight={h} />
+          ))}
+        </ul>
       </div>
-    </div>
+
+      {/* Hide the horizontal scrollbar in webkit browsers. Scoped via the
+          aria-label so it can't bleed into other sections. */}
+      <style>{`
+        section[aria-label="Catalog highlights"] .overflow-x-auto::-webkit-scrollbar { display: none; }
+      `}</style>
+    </section>
   );
 }
 
-function ProgressDot({
-  index,
-  total,
-  progress,
-}: {
-  index: number;
-  total: number;
-  progress: MotionValue<number>;
-}) {
-  const start = (index - 0.4) / (total - 1);
-  const end = (index + 0.4) / (total - 1);
-  const opacity = useTransform(
-    progress,
-    [start, end, end + 0.0001],
-    [0.3, 1, 0.3],
-  );
-  const scale = useTransform(
-    progress,
-    [start, end, end + 0.0001],
-    [1, 1.4, 1],
-  );
-
+function HighlightCard({ highlight }: { highlight: Highlight }) {
   return (
-    <motion.span
-      style={{ opacity, scale }}
-      className="block h-1.5 w-6 rounded-full bg-white"
-    />
+    <li className="snap-start">
+      <Link
+        href={highlight.href}
+        aria-label={`${highlight.category}: ${highlight.title}`}
+        className="group relative flex h-[clamp(360px,52vh,520px)] w-[clamp(280px,80vw,520px)] shrink-0 flex-col justify-between overflow-hidden rounded-[28px] p-8 text-white transition-transform duration-500 ease-out md:p-10"
+        style={{ background: highlight.background }}
+      >
+        {/* Soft top-left vignette for depth. Pure CSS, no JS. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            background:
+              "radial-gradient(120% 80% at 50% 110%, rgba(0,0,0,0.45), transparent 60%)",
+          }}
+        />
+
+        {/* Header: number + category */}
+        <div className="relative z-10 flex items-baseline justify-between">
+          <span className="text-[12px] uppercase tracking-[0.3em] opacity-70">
+            {highlight.number}
+          </span>
+          <span className="text-[12px] uppercase tracking-[0.3em] opacity-70">
+            {highlight.category}
+          </span>
+        </div>
+
+        {/* Body — sits at the bottom of the card */}
+        <div className="relative z-10">
+          <h3 className="display text-[clamp(1.75rem,3.2vw,2.5rem)] leading-[1.1]">
+            {highlight.title}
+          </h3>
+          <p className="mt-4 max-w-md text-[14px] leading-relaxed opacity-85">
+            {highlight.body}
+          </p>
+          <span className="mt-6 inline-flex items-center gap-2 text-[14px] font-medium opacity-90 transition-opacity group-hover:opacity-100">
+            {highlight.ctaLabel}
+            <span aria-hidden className="transition-transform group-hover:translate-x-1">
+              →
+            </span>
+          </span>
+        </div>
+      </Link>
+    </li>
   );
 }
