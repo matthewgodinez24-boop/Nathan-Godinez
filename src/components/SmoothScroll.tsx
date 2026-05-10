@@ -4,32 +4,29 @@ import { useEffect } from "react";
 import Lenis from "lenis";
 
 /**
+ * Make the global Lenis instance reachable from anywhere on the client.
+ * Other components (e.g. HorizontalShowcase's scroll-compensation effect)
+ * use this so they can call `lenis.scrollTo(..., { immediate: true })`
+ * instead of `window.scrollBy` and avoid fighting Lenis's smoothing target.
+ */
+declare global {
+  interface Window {
+    __lenis?: Lenis;
+  }
+}
+
+/**
  * SmoothScroll — initializes Lenis to smooth the page's scroll velocity.
  *
- * What this does, concretely:
- * - User triggers a scroll event (wheel, trackpad, touch). Native scroll input
- *   arrives in chunks — that's why mapping scrollY 1:1 to a transform feels
- *   "chunky" or "stuttery" on a heavy scroll-jacked section.
- * - Lenis intercepts those chunks and lerps `window.scrollY` toward the target
- *   on a requestAnimationFrame loop. The result is a continuous scrollY value
- *   that updates every frame.
- * - Framer Motion's `useScroll` reads `window.scrollY` and drives the showcase's
- *   horizontal transform from it. With Lenis driving the input, every transform
- *   that depends on scroll position gets buttery for free — no per-component
- *   spring smoothing required.
+ * Lenis intercepts wheel/touch input and lerps `window.scrollY` toward the
+ * target on a requestAnimationFrame loop. Framer Motion's `useScroll` reads
+ * the smoothed value, so every scroll-coupled animation gets buttery for free.
  *
- * Tuned for an Apple-product-page feel:
- * - Long-tail easing (exponential out, slightly slower than default)
- * - `lerp` of 0.085 → tight tracking but no jitter
- * - `wheelMultiplier` slightly > 1 → wheel and trackpad respond fast on entry
- *   but the tail decelerates smoothly
+ * Tuned conservatively — tight tracking, no floaty feel.
  */
 export function SmoothScroll() {
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    // Honor prefers-reduced-motion — never override the system scroll if the
-    // user has explicitly opted out of motion.
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const lenis = new Lenis({
@@ -40,6 +37,7 @@ export function SmoothScroll() {
       touchMultiplier: 1.6,
       smoothWheel: true,
     });
+    window.__lenis = lenis;
 
     let rafId: number;
     function raf(time: number) {
@@ -50,6 +48,7 @@ export function SmoothScroll() {
 
     return () => {
       cancelAnimationFrame(rafId);
+      if (window.__lenis === lenis) delete window.__lenis;
       lenis.destroy();
     };
   }, []);

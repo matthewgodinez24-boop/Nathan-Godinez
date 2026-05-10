@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import {
   motion,
   useScroll,
@@ -12,32 +12,69 @@ import {
 /**
  * One-shot horizontal showcase.
  *
- * Behavior:
- * - First entry on a session: render a tall scroll-jacked wrapper that pins the
- *   panels and pans them horizontally as the user scrolls vertically. The user
- *   is "forced" to swipe through once.
- * - When the pan reaches its end, mark the section consumed and persist a flag
- *   in `sessionStorage`. The wrapper collapses to a flat 100vh row.
- * - Crucial: the moment we collapse, we capture the wrapper's old height and
- *   inside a `useLayoutEffect` (synchronous, runs *before* the browser paints
- *   the new layout) we call `window.scrollBy(0, -delta)`. The user's viewport
- *   ends up showing the same DOM content it was showing a frame earlier — no
- *   jump, no teleport, no reflow flash.
- * - After consumption, scrolling up or down through the section is a normal
- *   100vh block. No re-pinning, no re-trapping.
+ * Behavior the client asked for:
+ * - First time the user enters this section, force them to right-swipe through
+ *   the four panels via vertical scroll (the scroll-jacked, pinned mode).
+ * - The moment they finish that swipe once, the section becomes a normal
+ *   100vh block. Scrolling up and back down through it never re-traps them.
  *
- * Why sessionStorage (not just useState):
- * - Without persistence, the consumed flag resets every time the homepage
- *   remounts — e.g. user clicks Store, hits Back, returns to `/`. They'd be
- *   re-trapped on every round trip. sessionStorage scopes the flag to the
- *   browser tab, so the cinematic plays exactly once per session.
- * - sessionStorage clears when the tab closes, so a genuine new visit (new
- *   day, new tab) re-plays the cinematic — which is what the client wants.
- * - localStorage would be wrong: it would dismiss the cinematic *forever*
- *   across sessions, which isn't what was asked for.
+ * Implementation notes:
+ * - The "consumed" flag lives in a *module-level* store, exposed to React via
+ *   `useSyncExternalStore`. That's the lint-safe primitive for "external state
+ *   that may differ between server and client" — it avoids the
+ *   react-hooks/set-state-in-effect rule and gives a clean SSR/hydration story.
+ * - The flag is also mirrored to `sessionStorage` so the experience plays
+ *   exactly once per browser tab. localStorage would dismiss it forever; bare
+ *   useState would re-trap on every navigation back to `/`.
+ * - When the wrapper shrinks mid-scroll, we compensate scroll position via
+ *   Lenis's own `scrollTo({ immediate: true })` (when Lenis is running).
+ *   Falling back to `window.scrollTo` if Lenis is absent. Using Lenis's API
+ *   means the smooth-scroll target and the actual scroll position update
+ *   together — no fight, no oscillation.
  */
 
 const STORAGE_KEY = "showcase-consumed";
+
+/* ---- module-level external store for the consumed flag ---- */
+
+let consumedRuntime = false;
+let consumedHydrated = false;
+const consumedSubscribers = new Set<() => void>();
+
+function readConsumed(): boolean {
+  // Lazily hydrate from sessionStorage on the first client read.
+  if (!consumedHydrated) {
+    consumedHydrated = true;
+    try {
+      consumedRuntime = sessionStorage.getItem(STORAGE_KEY) === "1";
+    } catch {
+      // sessionStorage may be blocked (private browsing, sandboxed iframes).
+      // The runtime override below still works for the lifetime of this tab.
+    }
+  }
+  return consumedRuntime;
+}
+
+function markConsumedExternal(): void {
+  if (consumedRuntime) return;
+  consumedRuntime = true;
+  consumedHydrated = true;
+  try {
+    sessionStorage.setItem(STORAGE_KEY, "1");
+  } catch {
+    // ignore — runtime flag still gives correct behavior for this tab.
+  }
+  consumedSubscribers.forEach((cb) => cb());
+}
+
+function subscribeConsumed(cb: () => void): () => void {
+  consumedSubscribers.add(cb);
+  return () => {
+    consumedSubscribers.delete(cb);
+  };
+}
+
+const getServerConsumedSnapshot = () => false;
 
 type Panel = {
   eyebrow: string;
@@ -79,59 +116,50 @@ const panels: Panel[] = [
 
 export function HorizontalShowcase() {
   const reduced = useReducedMotion();
-  const [consumed, setConsumed] = useState(false);
+  // Subscribe to the module-level store. SSR returns false (no flicker); client
+  // first render reads sessionStorage. React handles the snapshot mismatch
+  // without a hydration warning — useSyncExternalStore is built for this.
+  const consumed = useSyncExternalStore(
+    subscribeConsumed,
+    readConsumed,
+    getServerConsumedSnapshot,
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // A ref-based guard for the consumed transition. State is async; this is sync.
-  // Without it, fast scroll bursts could fire `markConsumed` more than once
-  // before React commits, double-capturing heights and breaking the math.
-  const consumedRef = useRef(false);
-  // Wrapper's pixel height captured immediately before the consumed flip during
-  // user scroll. The next layout effect uses it to compute the exact compensation.
+  // Captured at the moment the user finishes the pan, used by the layout
+  // effect below to compute the exact pixel compensation needed.
   const heightBeforeRef = useRef<number | null>(null);
 
-  // Hydrate from sessionStorage on mount. useLayoutEffect runs synchronously
-  // before the first browser paint, so a returning visitor lands directly on
-  // the compact PassThroughRow with no flicker of the tall scroll-jack.
-  useLayoutEffect(() => {
-    try {
-      if (sessionStorage.getItem(STORAGE_KEY) === "1") {
-        consumedRef.current = true;
-        setConsumed(true);
-      }
-    } catch {
-      // sessionStorage may be blocked (private browsing, sandboxed iframes, etc.).
-      // Falling back to per-mount state is the right behavior — the user just
-      // experiences the cinematic on each fresh load, no error path.
-    }
-  }, []);
-
-  // Compensate scroll position when the wrapper height shrinks mid-page.
-  // Runs synchronously after DOM commit, before the browser paints the new
-  // layout — so the visible viewport stays exactly where it was.
+  // After `consumed` flips true mid-scroll, the wrapper has shrunk from the
+  // tall scroll-jacked height to 100vh. Compensate scroll position so the
+  // visible viewport stays exactly where it was. useLayoutEffect runs after
+  // DOM commit but before the browser paints, so there's no flash.
   useLayoutEffect(() => {
     if (heightBeforeRef.current == null || !containerRef.current) return;
     const before = heightBeforeRef.current;
     const after = containerRef.current.offsetHeight;
     heightBeforeRef.current = null;
     const delta = before - after;
-    // `scrollBy` with a relative value (not `scrollTo` to an absolute target)
-    // means we're nudging by the exact amount the page reflowed under us. No
-    // assumptions about Lenis, scroll restoration, or where the user was.
-    if (delta > 0 && window.scrollY > 0) {
-      window.scrollBy(0, -delta);
+    if (delta <= 0 || window.scrollY <= 0) return;
+
+    const newY = Math.max(0, window.scrollY - delta);
+    // Prefer Lenis if it's running globally — its smooth-scroll target diverges
+    // from `window.scrollY` otherwise, and a raw `window.scrollBy` can be
+    // overwritten by Lenis's next RAF tick. `scrollTo({ immediate, force })`
+    // updates Lenis's target and the actual scroll position in lockstep.
+    const lenis = window.__lenis;
+    if (lenis) {
+      lenis.scrollTo(newY, { immediate: true, force: true });
+    } else {
+      window.scrollTo({ top: newY, left: 0, behavior: "auto" });
     }
   }, [consumed]);
 
-  function markConsumed() {
-    if (consumedRef.current || !containerRef.current) return;
-    consumedRef.current = true;
+  function handleConsumed() {
+    if (consumedRuntime || !containerRef.current) return;
+    // Capture height *before* the store update; the store update synchronously
+    // notifies subscribers, which schedules a re-render to PassThroughRow.
     heightBeforeRef.current = containerRef.current.offsetHeight;
-    setConsumed(true);
-    try {
-      sessionStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      // ignore — see hydration effect comment above.
-    }
+    markConsumedExternal();
   }
 
   if (reduced) return <FallbackStack />;
@@ -141,7 +169,7 @@ export function HorizontalShowcase() {
       {consumed ? (
         <PassThroughRow />
       ) : (
-        <ScrollJackedShowcase onConsumed={markConsumed} />
+        <ScrollJackedShowcase onConsumed={handleConsumed} />
       )}
     </div>
   );
