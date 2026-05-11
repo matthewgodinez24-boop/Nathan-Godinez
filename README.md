@@ -1,6 +1,16 @@
 # Artist Simple 01 — Premium Artist + Beat Marketplace
 
-A high-end Apple-inspired website for a guitarist/producer who collaborates and sells beats.
+> **Live site:** https://nathan-godinez.vercel.app
+> Portfolio piece by [Matthew Godinez](https://github.com/matthewgodinez24-boop). All rights reserved — see [LICENSE.md](./LICENSE.md).
+
+A high-end Apple-inspired website for a guitarist/producer who collaborates and sells beats. Built for the artist Nathan Godinez (Phase 1).
+
+**What's interesting in this codebase**
+- Apple "Get the highlights"-style horizontal carousel built on native CSS scroll-snap (not a JS scroller), with peek, custom rAF easing for programmatic scrolls, mouse pointer-drag, and an auto-advance progress fill.
+- Collaborator split math centralized in `src/lib/payouts.ts` with a load-time validator that throws if any beat's splits don't sum to 100% — Stripe Connect-ready.
+- Single source of truth for all site copy (`src/data/site.ts`) and catalog (`src/data/beats.ts`).
+- Theme system using `useSyncExternalStore` over an `<html>` class, with an inline boot script to prevent flash.
+- Page-wide perf: Lenis kept for programmatic scrolls only (`smoothWheel: false`) so native wheel stays on the compositor.
 
 Phase 1 deliverable: polished homepage, beat marketplace with filters, beat detail pages, collaborator split data structure, scroll animations, and a single-source-of-truth content model.
 
@@ -24,7 +34,7 @@ Other scripts:
 - `npm run lint` — run ESLint
 - `npm run typecheck` — run TypeScript without emitting
 
-**Stack:** Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4, Framer Motion.
+**Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Framer Motion, Lenis.
 
 ---
 

@@ -21,7 +21,7 @@ Per-beat collaborator splits are modeled in code and validated to sum to 100% at
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Framer Motion · Lenis (smooth scroll). Deployed on Vercel at `nathan-godinez.vercel.app`. No GitHub remote yet. No custom domain yet.
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Framer Motion · Lenis (smooth scroll). Deployed on Vercel at `nathan-godinez.vercel.app`. Source on GitHub at `matthewgodinez24-boop/Nathan-Godinez`. No custom domain yet.
 
 ## Routes
 
