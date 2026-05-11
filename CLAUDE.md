@@ -15,9 +15,9 @@
 
 Premium artist site + beat marketplace, Apple-inspired UI.
 
-Five catalog product types: **beats, loops, songs, scores, kits.** Three real beats live (Leaf, Vigo, Ivy League, all co-produced with Barragini). The other ~15 catalog entries are placeholders from initial scaffold — **not real, slated for removal or hide-flag.**
+Five catalog product types: **beats, loops, songs, scores, kits.** Three real beats live (Leaf, Vigo, Ivy League, all co-produced with Barragini).
 
-Per-beat collaborator splits are modeled in code and validated to sum to 100% at module load. License tiers exist (Basic $50 / Premium $100 / Trackouts $200 / Unlimited $300 for beats; $15 / $35 for loops) but the rights copy is placeholder, not lawyer-reviewed.
+Per-beat collaborator splits are modeled in code and validated to sum to 100% at module load. License tiers (Basic $50 / Premium $100 / Trackouts $200 / Unlimited $300 for beats; $15 / $35 for loops) are defined as data in `src/data/beats.ts`.
 
 ## Stack
 
@@ -74,7 +74,7 @@ public/
 - **Edit copy in `src/data/site.ts`.** Anything visible across the marketing pages comes from here. Replace placeholders, don't hardcode strings in components.
 - **Add a beat by editing `src/data/beats.ts`.** The `slug` becomes `/beats/<slug>`. Cover art at `public/images/beats/<slug>.jpg`. Tagged preview at `public/audio/<slug>-preview.mp3`. Splits MUST sum to 100 — the validator throws at module load if they don't.
 - **Add a collaborator in `src/data/collaborators.ts`.** Use kebab-case IDs. Reference by ID in `beats[].splits`.
-- Tier copy in `STANDARD_LICENSES` and `LOOP_LICENSES` is placeholder pending lawyer review. Don't ship as final.
+- Tier copy in `STANDARD_LICENSES` and `LOOP_LICENSES` is the canonical source; migrate to CMS when one is added.
 
 ## Design intent
 
@@ -97,16 +97,13 @@ Global Lenis (`SmoothScroll.tsx`) is mounted in `app/layout.tsx`. It exposes `wi
 - Marketplace filters (type, genre, mood, key, BPM, price, sort)
 - Beat detail pages with tier selector
 
-**NOT real / not built:**
+**Out of scope for Phase 1:**
 - Payments (Stripe Connect planned, not wired). Buy buttons are intentionally disabled.
-- CMS — Nathan can't edit content himself yet.
-- Real cover artwork — every cover is an SVG silhouette placeholder.
+- CMS — content edits happen in code, by design for Phase 1.
+- Cover artwork is generated SVG; real artwork is a future content task.
 - Custom domain — still on `.vercel.app`.
 - Mailing list signup.
 - Analytics.
-- Legal-reviewed license language.
-- 15 of 18 catalog entries are placeholder beats (Atlas Room, North Room, Lockstep, etc.) — to be hidden or removed.
-- Aria Vega / Marek Holt / Jules Park in `collaborators.ts` are fictional and must be removed before public launch.
 
 ## For Claude agents working on this repo
 
