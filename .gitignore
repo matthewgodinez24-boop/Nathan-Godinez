@@ -1,11 +1,28 @@
+# dependencies
 node_modules
+
+# build output
 .next
 out
 dist
+*.tsbuildinfo
+next-env.d.ts
+
+# environment / secrets
 .env*
 !.env.example
+
+# OS junk
 .DS_Store
+Thumbs.db
+
+# logs
 *.log
+
+# deployment
 .vercel
-next-env.d.ts
-.tsbuildinfo
+
+# editor / local agent state
+.claude/
+.vscode/
+.idea/

@@ -29,9 +29,14 @@ export function Header() {
 
   useEffect(() => {
     if (!isHome) return;
+    let last = false;
     const onScroll = () => {
       const threshold = Math.max(window.innerHeight * 0.85, 480);
-      setScrolledPastHero(window.scrollY > threshold);
+      const next = window.scrollY > threshold;
+      if (next !== last) {
+        last = next;
+        setScrolledPastHero(next);
+      }
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -44,15 +49,15 @@ export function Header() {
   return (
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-[background,backdrop-filter,border-color,color] duration-500",
+        "fixed inset-x-0 top-0 z-50 transition-[background,border-color,color] duration-500",
         isFloatingWhite ? "border-b border-transparent" : "border-b",
       )}
       style={{
         background: isFloatingWhite
           ? "transparent"
           : "color-mix(in srgb, var(--bg) 72%, transparent)",
-        backdropFilter: isFloatingWhite ? "none" : "saturate(180%) blur(20px)",
-        WebkitBackdropFilter: isFloatingWhite ? "none" : "saturate(180%) blur(20px)",
+        backdropFilter: isFloatingWhite ? "none" : "saturate(160%) blur(8px)",
+        WebkitBackdropFilter: isFloatingWhite ? "none" : "saturate(160%) blur(8px)",
         borderColor: isFloatingWhite ? "transparent" : "var(--line)",
         color: isFloatingWhite ? "#ffffff" : "var(--fg)",
       }}
