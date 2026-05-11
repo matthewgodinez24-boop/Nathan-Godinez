@@ -6,6 +6,34 @@ Each entry should answer: **what changed, what's open, what's next, anything bro
 
 ---
 
+## 2026-05-11 (late) — Public repo, security audit, hero image + headers
+
+### What shipped
+- Repo pushed to GitHub at `matthewgodinez24-boop/Nathan-Godinez`, flipped to public.
+- Added `LICENSE.md` (all rights reserved, view-only for portfolio review).
+- Scrubbed working-state admissions from `CLAUDE.md` and `project-log.md` before going public.
+- Ran a Codex security audit. **No Critical or High findings.** Five Medium/Low/Informational items actionable.
+- Applied the safe audit fixes:
+  - Baseline security headers in `next.config.ts` (`x-content-type-options`, `x-frame-options: DENY`, `referrer-policy`, `permissions-policy`). Verified live with curl.
+  - README portfolio framing, live link near top, fixed stale Next.js 15 → 16, added a "what's interesting in this codebase" section.
+  - Updated CLAUDE.md to remove the stale "No GitHub remote yet" line.
+- Hero image: `public/images/hero-nathan.jpg` resized from 6470×5301 / 7.8 MB → 2400px-wide / 1.0 MB (−87%). Switched `Hero.tsx` from raw `<img>` to `next/image` with `fill`, `priority`, `sizes="100vw"`.
+
+### Open from the audit (deferred or pending decisions)
+- **Audio previews** are still full 6–8 MB tracks behind a JS-only 10s cap (Codex Medium). Deferred to the Studio (CMS) build — Nathan wants to pick the preview start time per beat, so the preview generation happens in that workflow.
+- **`public/images/contact-background.jpg`** is from Pinterest (Codex Medium). Real copyright risk on a public repo. Forwarded to Cowork to coordinate a licensed/owned replacement with Nathan.
+- **postcss transitive CVE** through Next.js (GHSA-qx2v-qp2m-jg93) — moderate, not exploitable here (no user input flows into CSS). Wait for Next.js patch; don't force-downgrade.
+- **History rewrites** (tsbuildinfo 25 commits, author email metadata) — skipped. Force-push pain not worth the polish.
+- **CSP** — not added in this pass. Theme-boot inline script needs a hash/nonce, treat as its own session when added.
+
+### Marketplace security planning
+- User raised concern about getting "hacked / charged a lot" when payments are wired. Forwarded to Cowork to scope the right architecture before coding starts. Notes in the forward.
+
+### Nothing broke
+Build + typecheck clean. Two deploys: security-headers-only `0df3757`, then hero image `b70be80`.
+
+---
+
 ## 2026-05-11 — Apple "Get the highlights" carousel + page-wide perf pass
 
 ### What shipped
