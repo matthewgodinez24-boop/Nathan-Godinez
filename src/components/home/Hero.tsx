@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import {
   motion,
   useScroll,
@@ -43,19 +44,19 @@ export function Hero() {
       className="relative h-[100dvh] min-h-[640px] overflow-hidden"
       aria-label={`${site.artist.name} — ${site.artist.tagline}`}
     >
-      {/* Photo — fills the viewport */}
+      {/* Photo — fills the viewport. next/image generates a responsive
+          WebP/AVIF srcset on demand from the resized 2400px source. */}
       <motion.div
         style={{ scale: imgScale, y: imgY }}
         className="absolute inset-0"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={site.artist.portrait}
           alt={`${site.artist.name} in the studio`}
-          className="h-full w-full object-cover"
-          // High priority — this is the largest contentful paint
-          fetchPriority="high"
-          decoding="async"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover"
         />
       </motion.div>
 
